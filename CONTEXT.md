@@ -33,11 +33,10 @@ Built:
 - `store.py` — JSON queue at `~/.nudge/queue.json` (`NUDGE_HOME` overrides). This is
   where scheduling lives.
 - `timespec.py` — duration parsing and relative-time display
-- `notify.py` — delivery only. Plays `NUDGE_SOUND` (default `Ping`, `none` silences).
-  Chooses its sender by outcome, not availability: a sender that exits non-zero is retried
-  with the next one. Puts one notification on screen, synchronously, right
-  now; it does not schedule and holds no state. Tries each sender in turn and falls back
-  on a non-zero exit, not merely on absence.
+- `notify.py` — delivery only: puts one notification on screen, synchronously, right now;
+  it does not schedule and holds no state. Chooses its sender by outcome, not
+  availability: a sender that exits non-zero is retried with the next one. Plays
+  `NUDGE_SOUND` (default `Ping`, also when empty; `none` or `off` silences).
 - `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link.
   Uninstall is best-effort-then-verify, not transactional: rolling back a delete would
   mean recreating what was just removed, and a half-done uninstall is better finished
@@ -103,19 +102,21 @@ There is no API to take a banner back.
 - Shims carry a marker comment, so `uninstall` and `install` can tell a shim they wrote
   from an unrelated `nudge` on the PATH and refuse to clobber it. `write_shims()` checks
   every destination before writing any, so a refusal cannot half-install.
-- `install.healthy()` checks the LaunchAgent's program still exists, not just that the
-  job is loaded: a moved clone leaves a job `launchctl` reports as loaded until it next
+- `install.problem()` names why a nudge would not fire, or returns None; `healthy()` is
+  just `problem() is None`. It checks the LaunchAgent's program still exists, not just that
+  the job is loaded: a moved clone leaves a job `launchctl` reports as loaded until it next
   tries to start it.
-- `nudge status` runs the same code as `install.py status` so the skill only needs one command; on
-  an unhealthy install it prints a repair command carrying the clone path, which is known
-  at runtime from the shim rather than from any committed file.
+- `nudge status` runs the same code as `install.py status`, so the skill only needs one
+  command. On an unhealthy install both exit 1 and print the reason and a repair command
+  carrying the clone path, which is known at runtime from the shim rather than from any
+  committed file.
 
 ## Known gaps
 
 - **Delivery is at-most-once (accepted).** `claim_due()` deletes jobs from the queue
   before `notify.send()` runs, so a daemon killed in that window loses them. The claim is
   per-tick and batched: if five jobs come due together and the daemon dies after the second
-  send, the other three are gone, not just one. Chosen deliberately over at-least-once --
+  send, the other three are gone, not just one. Chosen deliberately over at-least-once —
   a duplicate nudge is worse than a missed one here.
   *Troubleshooting:* "scheduled, never arrived, not in `nudge list`" = this window, not a bug
   in parsing or the LaunchAgent. *If this ever needs to change:* claim into an `inflight` list,
@@ -176,7 +177,7 @@ Verified by hand on this machine:
 - The move case: the repo was copied to a temp dir, `install.py install` run from the
   copy repointed the shims and the skill symlink, a nudge scheduled from the copy
   fired, and re-installing from the real location restored everything. The plist needs
-  no repointing -- it names the shim, whose path is stable, which is the reason for the
+  no repointing — it names the shim, whose path is stable, which is the reason for the
   indirection.
 - `uninstall` removed every artifact, left `~/.nudge/` state alone, and is
   idempotent. A planted foreign `nudge` on the PATH and a planted real directory at

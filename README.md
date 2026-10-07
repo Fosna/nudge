@@ -157,13 +157,15 @@ identity, which is what lets you set Alerts for nudge alone instead of for Scrip
 
 ## Sound and persistence
 
-Nudges play `Ping` by default. Pick another from `/System/Library/Sounds`, or silence
-them, at install time:
+Nudges play `Ping` by default. Pick another, or silence them, at install time:
 
 ```bash
-NUDGE_SOUND=Glass python3 install.py install   # Basso Blow Bottle Frog Funk Glass Hero
-NUDGE_SOUND=none  python3 install.py install   # Morse Ping Pop Purr Sosumi Submarine Tink
+ls /System/Library/Sounds                      # the names you can use, minus .aiff
+NUDGE_SOUND=Glass python3 install.py install   # a different sound
+NUDGE_SOUND=none  python3 install.py install   # silent (off works too)
 ```
+
+An empty `NUDGE_SOUND` means the default, not silence.
 
 Like `NUDGE_TICK`, it has to be set when you install — the daemon cannot see your shell.
 
@@ -188,8 +190,8 @@ That first log line names the tick, the sender, the sound and the queue path. If
 the daemon's PATH is the reason — re-run `python3 install.py install` from a shell that
 can see it.
 
-It exits non-zero and prints the repair command if the daemon won't fire. To find the
-process yourself:
+When nothing would fire, `nudge status` exits non-zero, says why, and prints the command
+that repairs it. To find the process yourself:
 
 ```bash
 pgrep -fl nudge_daemon

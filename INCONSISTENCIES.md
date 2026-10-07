@@ -1,6 +1,6 @@
 # Inconsistencies
 
-Repo scan, 2026-10-07. **15/24 fixed, 1 skipped.** Items keep their original numbers so
+Repo scan, 2026-10-07. **21/27 fixed, 1 skipped.** Items keep their original numbers so
 earlier references still work. Line references are current as of the fixes below.
 
 Counts are **fixed/found**: `2/2` means everything found is fixed. Skipped items are
@@ -9,11 +9,11 @@ decided against, not fixed, so they stay out of the fixed count.
 | Category | Fixed/found | Open | Fixed | Skipped |
 |---|---|---|---|---|
 | Behaviour bugs | 6/6 | — | #9, #10, #12, #14, #15, #16 | — |
-| Wrong or stale docs | 7/8 | — | #1, #2, #3, #4, #5, #7, #11 | #6 |
+| Wrong or stale docs | 10/11 | — | #1, #2, #3, #4, #5, #7, #11, #25, #26, #27 | #6 |
 | Duplicated logic and hidden rules | 0/3 | #13, #17, #24 | — | — |
 | Test hygiene | 2/4 | #20, #21 | #18, #19 | — |
-| Cosmetic | 0/3 | #8, #22, #23 | — | — |
-| **Total** | **15/24** | | | **1** |
+| Cosmetic | 3/3 | — | #8, #22, #23 | — |
+| **Total** | **21/27** | | | **1** |
 
 Focus/DND stays an open, unverified item; it is not tracked here.
 
@@ -31,13 +31,13 @@ Each cell is **fixed/found**, then the items. `—` means nothing found.
 | Category | High | Medium | Low |
 |---|---|---|---|
 | Behaviour bugs | 2/2 (#14 ✓, #15 ✓) | 3/3 (#9 ✓, #10 ✓, #12 ✓) | 1/1 (#16 ✓) |
-| Wrong or stale docs | — | 1/1 (#4 ✓) | 6/7 (#1 ✓, #2 ✓, #3 ✓, #5 ✓, #7 ✓, #11 ✓, #6 ⊘) |
+| Wrong or stale docs | — | 1/1 (#4 ✓) | 9/10 (#1 ✓, #2 ✓, #3 ✓, #5 ✓, #7 ✓, #11 ✓, #25 ✓, #26 ✓, #27 ✓, #6 ⊘) |
 | Duplicated logic and hidden rules | — | — | 0/3 (#13, #17, #24) |
 | Test hygiene | — | 2/2 (#18 ✓, #19 ✓) | 0/2 (#20, #21) |
-| Cosmetic | — | — | 0/3 (#8, #22, #23) |
-| **Total** | **2/2** | **6/6** | **7/16** |
+| Cosmetic | — | — | 3/3 (#8 ✓, #22 ✓, #23 ✓) |
+| **Total** | **2/2** | **6/6** | **13/19** |
 
-Every High and Medium item is fixed. All 8 open items are Low.
+Every High and Medium item is fixed. All 5 open items are Low.
 
 ## Behaviour bugs (6/6)
 
@@ -65,7 +65,7 @@ The program does the wrong thing.
   is not running". `install.problem()` now names the actual reason: not installed,
   unreadable plist, program gone, or not loaded.
 
-## Wrong or stale docs (7/8)
+## Wrong or stale docs (10/11)
 
 The docs say something untrue. Rule from the fixes: don't write counts of things into the
 docs ("four artifacts", "53 tests"). They go stale every time the list changes.
@@ -89,6 +89,13 @@ docs ("four artifacts", "53 tests"). They go stale every time the list changes.
   underneath is gone.
 - **#11: The `timespec.py` docstring was too narrow.** It only mentioned parsing; it now
   covers `humanize()` too.
+- **#25: `CONTEXT.md` still described `install.healthy()` as the health check.** Found in a
+  second docs pass, after #16 moved the logic into `install.problem()`. It now describes
+  `problem()`, and that both `status` commands exit 1 with the reason.
+- **#26: The `notify.py` entry in `CONTEXT.md` said the same thing twice.** "Chooses its
+  sender by outcome" and "falls back on a non-zero exit" were both there. Merged.
+- **#27: The empty-`NUDGE_SOUND` rule from #12 wasn't documented.** README and `CONTEXT.md`
+  now say empty means the default, and that `off` silences as well as `none`.
 
 ### Skipped
 
@@ -128,14 +135,15 @@ Works today, but could drift or mislead. Low priority.
   `plist_body()` with the real environment and `shutil.which`. It now passes `env={}` and
   `which_binary`, like the other plist tests.
 
-## Cosmetic (0/3)
+## Cosmetic (3/3)
 
 Wording and formatting. Low priority.
 
-- **#8: README's sound list is split confusingly.** At `README.md:164–165`, the list of sound
-  names runs across both comment lines, so the second half sits next to `NUDGE_SOUND=none`
-  and looks like it describes that line.
-- **#22: Mixed dashes.** Code comments use `--` and the docs use `—`, and `CONTEXT.md` mixes both
-  (`:118` and `:179` use `--`).
-- **#23: Unclear "It".** At `README.md:191`, "It exits non-zero…" follows the `head -1` command,
-  but it refers to `nudge status`.
+### Fixed
+
+- **#8: README's sound list was split confusingly** across two comment lines. The list is
+  gone; README now says to run `ls /System/Library/Sounds`, which can't go stale.
+- **#23: Unclear "It".** README's "It exits non-zero…" followed a log command but meant
+  `nudge status`. It now names `nudge status` and says it prints the reason.
+- **#22: Mixed dashes.** `CONTEXT.md` used `--` in two places among `—`. Both are `—` now.
+  The convention: code and its comments use ASCII `--`, the Markdown docs use `—`.
