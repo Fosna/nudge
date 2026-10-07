@@ -79,8 +79,9 @@ There is no API to take a banner back.
        in any shell and `None` in the daemon, so every scheduled nudge silently delivered
        through osascript — same text, same sound, attributed to Script Editor, so the
        notification style set on terminal-notifier never applied. Hence `NUDGE_NOTIFIER`
-       is pinned into the plist too, with `shutil.which` and a scan of
-       `/opt/homebrew/bin` and `/usr/local/bin` behind it.
+       is pinned into the plist too. Install and the daemon both look it up with
+       `notify.find_notifier()`: `shutil.which`, then a scan of `/opt/homebrew/bin` and
+       `/usr/local/bin`.
   Both failed silently behind a working-looking fallback, which is what made them
   expensive. Anything added later that shells out to a non-system binary will reproduce
   this; resolve it at install time and write the absolute path into the plist.

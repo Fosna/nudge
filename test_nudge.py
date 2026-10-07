@@ -1,6 +1,8 @@
 """Tests for the nudge core. No sleeping, no real notifications."""
 
+import contextlib
 import importlib
+import io
 import os
 import tempfile
 import time
@@ -153,7 +155,7 @@ class TestDaemon(StoreCase):
             slept.append(seconds)
             raise _StopLoop
 
-        with self.assertRaises(_StopLoop):
+        with self.assertRaises(_StopLoop), contextlib.redirect_stdout(io.StringIO()):
             self.daemon.run_forever(clock=lambda: 0.0, sleep=sleep, send=self.send)
         self.assertEqual(slept, [15.0])
 
@@ -203,6 +205,10 @@ class TestDaemonEnv(StoreCase):
         super().setUp()
         import install
         self.install = importlib.reload(install)
+        # find_notifier also scans Homebrew's bin dirs; this machine's must not count
+        patch = mock.patch.object(self.install.notify, "EXTRA_BIN_DIRS", ())
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def test_settings_are_baked_into_the_plist(self):
         # launchd inherits nothing from the installing shell
@@ -225,6 +231,19 @@ class TestDaemonEnv(StoreCase):
         body = self.install.plist_body(env={}, which_binary=lambda n: "/opt/homebrew/bin/" + n)
         self.assertEqual(body["EnvironmentVariables"]["NUDGE_NOTIFIER"],
                          "/opt/homebrew/bin/terminal-notifier")
+
+    def test_install_finds_the_notifier_the_way_the_daemon_does(self):
+        # outside PATH but in a Homebrew bin dir: the daemon would find it, so pin it
+        found = "/opt/homebrew/bin/terminal-notifier"
+        with mock.patch.object(self.install.notify, "EXTRA_BIN_DIRS", ("/opt/homebrew/bin",)), \
+                mock.patch.object(self.install.notify.os, "access", lambda p, m: p == found):
+            body = self.install.plist_body(env={}, which_binary=lambda n: None)
+        self.assertEqual(body["EnvironmentVariables"]["NUDGE_NOTIFIER"], found)
+
+    def test_unusable_pinned_notifier_is_not_baked_in(self):
+        body = self.install.plist_body(env={"NUDGE_NOTIFIER": "/nope/terminal-notifier"},
+                                       which_binary=lambda n: None)
+        self.assertNotIn("NUDGE_NOTIFIER", body.get("EnvironmentVariables", {}))
 
     def test_no_notifier_pinned_when_none_installed(self):
         body = self.install.plist_body(env={}, which_binary=lambda n: None)
@@ -404,13 +423,15 @@ class TestNotifierLookup(unittest.TestCase):
 class TestNotifyCommand(unittest.TestCase):
     def test_text_is_argv_never_script_body(self):
         import notify
-        argv = notify.command("nudge", 'he said "hi"; rm -rf /\nnext')
-        self.assertIn('he said "hi"; rm -rf /\nnext', argv)
+        text = 'he said "hi"; rm -rf /\nnext'
+        for argv in notify.commands("nudge", text, which=lambda n: "/x/" + n):
+            self.assertIn(text, argv)
 
     def test_send_uses_injected_runner(self):
         import notify
         calls = []
-        notify.send("t", "m", runner=lambda argv, **kw: calls.append(argv))
+        notify.send("t", "m", runner=lambda argv, **kw: calls.append(argv),
+                    which=lambda n: None)
         self.assertEqual(len(calls), 1)
 
 
@@ -424,6 +445,10 @@ class TestInstall(StoreCase):
         super().setUp()
         import install
         self.install = importlib.reload(install)
+        # install and uninstall report to stdout; keep it out of the test run
+        quiet = contextlib.redirect_stdout(io.StringIO())
+        quiet.__enter__()
+        self.addCleanup(quiet.__exit__, None, None, None)
 
     def _sandbox(self):
         """Point every path install writes to at the tmpdir."""

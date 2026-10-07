@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 
+import notify
 import store
 
 LABEL = "com.nudge.daemon"
@@ -74,7 +75,7 @@ def daemon_env(env=None, which=None):
     env = os.environ if env is None else env
     settings = {k: env[k] for k in ("NUDGE_TICK", "NUDGE_HOME", "NUDGE_SOUND")
                 if env.get(k) is not None and env[k] != ""}
-    notifier = env.get("NUDGE_NOTIFIER") or (which or shutil.which)("terminal-notifier")
+    notifier = notify.find_notifier(env, which=which or shutil.which)
     if notifier:
         settings["NUDGE_NOTIFIER"] = notifier
     return settings
@@ -108,12 +109,17 @@ def _domain():
     return "gui/%d" % os.getuid()
 
 
+def _target():
+    """The job's launchctl service target, gui/<uid>/<label>."""
+    return "%s/%s" % (_domain(), LABEL)
+
+
 def _launchctl(*args):
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
 def is_loaded():
-    return _launchctl("print", "%s/%s" % (_domain(), LABEL)).returncode == 0
+    return _launchctl("print", _target()).returncode == 0
 
 
 def _describe(print_output):
@@ -179,7 +185,7 @@ def cmd_install(args):
     os.makedirs(store.HOME, exist_ok=True)
     shims = write_shims()
     if is_loaded():
-        _launchctl("bootout", "%s/%s" % (_domain(), LABEL))  # replace cleanly
+        _launchctl("bootout", _target())  # replace cleanly
     with open(PLIST, "wb") as f:
         plistlib.dump(plist_body(), f)
     r = _launchctl("bootstrap", _domain(), PLIST)
@@ -247,7 +253,7 @@ def cmd_uninstall(args):
     # Stop the daemon before the plist goes, so a refusal here is still
     # recoverable with launchctl -- the job it names would otherwise be gone.
     if is_loaded():
-        r = _launchctl("bootout", "%s/%s" % (_domain(), LABEL))
+        r = _launchctl("bootout", _target())
         if r.returncode != 0 and is_loaded():
             failed.append(("launchd job " + LABEL,
                            (r.stderr or "").strip() or "bootout exited %d" % r.returncode))
@@ -379,7 +385,7 @@ def status_report():
     lines = []
     managed_pid = None
     if os.path.exists(PLIST):
-        r = _launchctl("print", "%s/%s" % (_domain(), LABEL))
+        r = _launchctl("print", _target())
         program = plist_program()
         if r.returncode != 0:
             lines.append("daemon  plist present but not loaded")

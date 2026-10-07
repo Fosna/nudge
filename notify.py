@@ -13,6 +13,10 @@ import subprocess
 DEFAULT_SOUND = "Ping"  # a name from /System/Library/Sounds
 SILENT = ("none", "off")
 
+# Default for `sound=`: read NUDGE_SOUND. None already means silent, so the
+# "not given" case needs a value of its own.
+FROM_ENV = object()
+
 # launchd gives an agent PATH=/usr/bin:/bin:/usr/sbin:/sbin and nothing else, so
 # a Homebrew terminal-notifier is invisible to `which` inside the daemon even
 # though it is on the PATH of every shell. The daemon would then quietly deliver
@@ -64,15 +68,17 @@ def sound_name(env=None):
     return None if raw.lower() in SILENT else raw
 
 
-def commands(title, message, which=_default_which, sound=False):
+def commands(title, message, which=_default_which, sound=FROM_ENV):
     """Every way to deliver one notification, best first.
 
     Each form passes the text as separate arguments -- never interpolated into
     a script body -- so quotes and newlines in a message stay inert. That holds
     for the sound name too, which is why it is an argv item and not spliced into
     the AppleScript source.
+
+    `sound` is a sound name, None for silent, or FROM_ENV to read `NUDGE_SOUND`.
     """
-    sound = sound_name() if sound is False else sound
+    sound = sound_name() if sound is FROM_ENV else sound
     forms = []
     tn = which("terminal-notifier")
     if tn:
@@ -84,12 +90,7 @@ def commands(title, message, which=_default_which, sound=False):
     return forms
 
 
-def command(title, message, which=_default_which, sound=False):
-    """The preferred form. Kept for callers that only want to inspect argv."""
-    return commands(title, message, which=which, sound=sound)[0]
-
-
-def send(title, message, runner=subprocess.run, which=_default_which, sound=False):
+def send(title, message, runner=subprocess.run, which=_default_which, sound=FROM_ENV):
     """Deliver one notification, trying each form until one succeeds.
 
     Returns (argv, result) for the attempt that worked, or (None, [results])
