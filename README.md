@@ -113,7 +113,7 @@ cd ~/anywhere/nudge
 python3 install.py install
 ```
 
-That resolves where the clone lives and writes four things:
+That resolves where the clone lives and writes:
 
 | | |
 |---|---|
@@ -179,7 +179,7 @@ Banners / Alerts. `terminal-notifier -diagnose` prints the style currently in ef
 ## Troubleshooting
 
 ```bash
-nudge status        # daemon, both shims, and the skill link
+nudge status        # daemon, shims, and the skill link
 head -1 ~/.nudge/daemon.log   # what the daemon resolved at startup
 ```
 
@@ -252,8 +252,8 @@ covered — check those by hand.
 ## Uninstall
 
 ```bash
-python3 install.py uninstall   # daemon, shims, skill link
-rm -rf ~/.nudge                # and the queue, if you want it gone
+python3 install.py uninstall                      # daemon, shims, skill link
+python3 install.py uninstall && rm -rf ~/.nudge   # and the queue, if you want it gone
 ```
 
 `uninstall` removes only what it wrote: a foreign `nudge` on your PATH or a skill link
@@ -262,12 +262,6 @@ pointing outside this clone is left in place, and says so rather than skipping s
 It never aborts half-way — a removal that fails is reported and the rest still runs —
 and it **verifies afterwards**, checking the job is unloaded, no daemon survives, and
 every file is gone. If anything is left it prints what, and exits non-zero. So the
-`&&` above is load-bearing:
-
-```bash
-python3 install.py uninstall && rm -rf ~/.nudge
-```
-
-Without it you could delete the queue while a daemon is still reading it. The usual
-cause is a `nudge_daemon.py` someone started by hand, which `launchctl` never managed
-and uninstall therefore cannot stop.
+`&&` above is load-bearing: without it you could delete the queue while a daemon is
+still reading it. The usual cause is a `nudge_daemon.py` someone started by hand, which
+`launchctl` never managed and uninstall therefore cannot stop.

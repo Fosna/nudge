@@ -1,4 +1,5 @@
-"""Parsing of the duration token in `nudge in <duration> <message>`."""
+"""Durations for nudge: parsing the token in `nudge in <duration> <message>`, and the
+relative-time display in `nudge list`."""
 
 import math
 import re

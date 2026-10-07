@@ -41,7 +41,7 @@ Built:
 - `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link.
   Uninstall is best-effort-then-verify, not transactional: rolling back a delete would
   mean recreating what was just removed, and a half-done uninstall is better finished
-  than reverted. It records each failure, keeps going, re-checks all five artefacts, and
+  than reverted. It records each failure, keeps going, re-checks everything it should have removed, and
   exits non-zero if any survived so `uninstall && rm -rf ~/.nudge` cannot delete a live
   daemon's queue.
 - `.claude/skills/nudge/SKILL.md` — the Claude Code skill wrapping the CLI
@@ -49,7 +49,7 @@ Built:
   `python3 -m unittest test_nudge`.
 - `README.md` — Claude Code usage, install, design, troubleshooting, known gaps
 
-`install.py install` generates four artifacts outside the repo: `~/.local/bin/nudge` and
+`install.py install` generates these artifacts outside the repo: `~/.local/bin/nudge` and
 `~/.local/bin/nudge-daemon` (shims execing this clone), the LaunchAgent plist (pointing
 at the `nudge-daemon` shim), and `~/.claude/skills/nudge` symlinked to this clone's
 skill, which is what makes the skill global. Re-run it after moving the clone.
@@ -168,17 +168,17 @@ Before calling any change done, run `python3 -m unittest test_nudge` and
 `python3 -W error::ResourceWarning -m unittest test_nudge`. Both must pass.
 
 Verified by hand on this machine:
-- `install.py install` writes both shims, the plist and the skill symlink; `nudge`
-  resolves on the PATH; `status` reports all four healthy.
+- `install.py install` writes the shims, the plist and the skill symlink; `nudge`
+  resolves on the PATH; `status` reports everything healthy.
 - A nudge scheduled with the bare `nudge` command from outside the repo fired and the
   queue drained — the daemon runs under launchd (ppid 1), not the calling shell.
 - `pgrep -fl nudge_daemon` now identifies the process, which `daemon.py` did not.
 - The move case: the repo was copied to a temp dir, `install.py install` run from the
-  copy repointed both shims and the skill symlink, a nudge scheduled from the copy
+  copy repointed the shims and the skill symlink, a nudge scheduled from the copy
   fired, and re-installing from the real location restored everything. The plist needs
   no repointing -- it names the shim, whose path is stable, which is the reason for the
   indirection.
-- `uninstall` removed all four artifacts, left `~/.nudge/` state alone, and is
+- `uninstall` removed every artifact, left `~/.nudge/` state alone, and is
   idempotent. A planted foreign `nudge` on the PATH and a planted real directory at
   `~/.claude/skills/nudge` were both refused rather than clobbered, and survived intact.
 - Every command in README.md and SKILL.md was run verbatim.

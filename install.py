@@ -6,7 +6,7 @@
     python3 install.py uninstall
 
 Nothing in the repo records where the repo lives. `install` resolves that here,
-at install time, and bakes it into three generated artifacts:
+at install time, and bakes it into these generated artifacts:
 
     ~/.local/bin/nudge              shim -> this clone's nudge.py
     ~/.local/bin/nudge-daemon       shim -> this clone's nudge_daemon.py
@@ -133,7 +133,7 @@ def _describe(print_output):
 
 
 def write_shims(python=sys.executable, here=HERE, bindir=None):
-    """Write both shims, or neither.
+    """Write every shim, or none.
 
     Every destination is checked before anything is written, so refusing one
     foreign command cannot leave the other shim half-installed.
