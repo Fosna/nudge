@@ -9,6 +9,7 @@ The sweep interval comes from `NUDGE_TICK` (default 15s). A job therefore fires
 up to one tick late, which is why sub-tick delays are approximate.
 """
 
+import math
 import os
 import sys
 import time
@@ -30,7 +31,7 @@ def tick_seconds(env=None):
         return DEFAULT_TICK
     try:
         value = float(raw)
-        if value <= 0:
+        if not math.isfinite(value) or value <= 0:
             raise ValueError
     except ValueError:
         print("nudge: ignoring bad NUDGE_TICK=%r, using %gs" % (raw, DEFAULT_TICK),

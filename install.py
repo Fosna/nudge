@@ -321,10 +321,10 @@ def repair_command():
     The clone's path is known at runtime because the shim that invoked us has it
     baked in -- it is never written into a committed file.
     """
-    return "python3 %s" % os.path.join(HERE, "install.py install")
+    return "%s %s install" % (_quote(sys.executable), _quote(os.path.join(HERE, "install.py")))
 
 
-DAEMON_NAMES = ("nudge_daemon.py", "daemon.py")
+DAEMON_NAMES = ("nudge_daemon.py",)
 
 
 def _process_table():
@@ -344,8 +344,7 @@ def strays(managed_pid=None, table=None):
     A daemon started by hand outlives the shell that started it and keeps
     sweeping the same queue, so it silently steals jobs from the managed one --
     including firing them at its own interval, which makes `NUDGE_TICK` look
-    broken. Matches the legacy `daemon.py` name too, since a hand-started process
-    holds the file open after a rename.
+    broken.
 
     The match is on argv shape -- a python interpreter invoked against a file
     named like the daemon -- not a substring of the whole command. A substring

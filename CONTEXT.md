@@ -45,7 +45,8 @@ Built:
   exits non-zero if any survived so `uninstall && rm -rf ~/.nudge` cannot delete a live
   daemon's queue.
 - `.claude/skills/nudge/SKILL.md` — the Claude Code skill wrapping the CLI
-- `test_nudge.py` — 53 unittest cases
+- `test_nudge.py` — the unittest suite. Run it after every change:
+  `python3 -m unittest test_nudge`.
 - `README.md` — Claude Code usage, install, design, troubleshooting, known gaps
 
 `install.py install` generates four artifacts outside the repo: `~/.local/bin/nudge` and
@@ -119,12 +120,12 @@ There is no API to take a banner back.
   *Troubleshooting:* "scheduled, never arrived, not in `nudge list`" = this window, not a bug
   in parsing or the LaunchAgent. *If this ever needs to change:* claim into an `inflight` list,
   delete after send, re-queue leftovers at daemon startup.
-- Focus/DND is the last behaviour unverified by hand. `terminal-notifier -ignoreDnD`
+- Focus/DND is unverified by hand. `terminal-notifier -ignoreDnD`
   exists and is untried; it is best-effort per its own help text.
 - Banner dwell time is macOS's, not ours: Banners auto-dismiss in ~5s, Alerts persist, set
-  per delivering app in System Settings. Under the osascript fallback that app is Script
-  Editor, so the style cannot be set for nudge alone — `terminal-notifier` would register
-  its own sender identity and fix that.
+  per delivering app in System Settings. `terminal-notifier` is the delivery path and has
+  its own sender identity, so the style can be set for nudge alone. Only the osascript
+  fallback delivers as Script Editor, whose style is shared with everything else.
 - A hand-started daemon steals jobs from the managed one and fires them on its own
   interval. `nudge status` now reports strays, but nothing prevents one.
 
@@ -147,7 +148,8 @@ older Banners/Alerts). Now reads `alerts (stay until dismissed)`.
 
 Banner visibility confirmed the same day from a screenshot: title `nudge`, the message
 body, Script Editor's icon, rendered as an Alert with a close button rather than a
-self-dismissing banner.
+self-dismissing banner. The icon means that delivery went through the osascript fallback;
+delivery through `terminal-notifier` was confirmed separately, above.
 
 Verified by hand: with only the managed daemon running, three `nudge in 1s` samples
 fired after 3s, 16s and 15s — consistent with a 15s sweep. `NUDGE_TICK=60 install`
@@ -160,8 +162,10 @@ should not be trusted. `nudge status` now reports strays.
 
 ## Status
 
-Shim bootstrap and configurable tick done. `python3 -m unittest test_nudge` → 53 pass, clean under
-`-W error::ResourceWarning`.
+Shim bootstrap and configurable tick done.
+
+Before calling any change done, run `python3 -m unittest test_nudge` and
+`python3 -W error::ResourceWarning -m unittest test_nudge`. Both must pass.
 
 Verified by hand on this machine:
 - `install.py install` writes both shims, the plist and the skill symlink; `nudge`
@@ -181,8 +185,8 @@ Verified by hand on this machine:
 - No committed file contains an absolute path into a home directory; swept with grep
   over every `.py` and `.md` in the repo.
 
-Still unverified: sleep/wake, Focus/DND, a real `terminal-notifier` binary, whether a
-banner visibly appears (needs human eyes), and a genuinely different machine.
+Still unverified: Focus/DND, and a genuinely different machine. Sleep/wake, a real
+`terminal-notifier` and banner visibility were confirmed on 2026-10-07 (see Tick change).
 
 Next step: nothing queued. Candidates are `at <time>`, crash-safe delivery, and the
 unverified behaviour above.

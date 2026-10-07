@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 DEFAULT_SOUND = "Ping"  # a name from /System/Library/Sounds
-SILENT = ("", "none", "off")
+SILENT = ("none", "off")
 
 # launchd gives an agent PATH=/usr/bin:/bin:/usr/sbin:/sbin and nothing else, so
 # a Homebrew terminal-notifier is invisible to `which` inside the daemon even
@@ -53,11 +53,15 @@ def _osascript(with_sound):
 
 
 def sound_name(env=None):
-    """The sound to play, from `NUDGE_SOUND`. Empty, `none` or `off` means silent."""
-    raw = (os.environ if env is None else env).get("NUDGE_SOUND")
-    if raw is None:
+    """The sound to play, from `NUDGE_SOUND`.
+
+    Unset or empty means the default; `none` or `off` means silent. Empty is
+    not silent because install drops blank settings, so the daemon never sees one.
+    """
+    raw = ((os.environ if env is None else env).get("NUDGE_SOUND") or "").strip()
+    if not raw:
         return DEFAULT_SOUND
-    return None if raw.strip().lower() in SILENT else raw.strip()
+    return None if raw.lower() in SILENT else raw
 
 
 def commands(title, message, which=_default_which, sound=False):

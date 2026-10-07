@@ -134,7 +134,7 @@ class TestDaemon(StoreCase):
     def test_bad_tick_falls_back_instead_of_crashlooping(self):
         # the daemon runs under KeepAlive, so raising here would be a crash loop
         import contextlib, io
-        for bad in ["nope", "0", "-5", ""]:
+        for bad in ["nope", "0", "-5", "", "nan", "inf", "-inf"]:
             with self.subTest(bad=bad), contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(self.daemon.tick_seconds({"NUDGE_TICK": bad}), 15.0)
             if bad:
@@ -246,7 +246,7 @@ class TestStrays(StoreCase):
 
     TABLE = [
         (10, "/usr/bin/Python /repo/nudge_daemon.py"),
-        (11, "/usr/bin/Python daemon.py"),             # legacy name, still sweeping
+        (11, "/usr/bin/python3 /srv/other/daemon.py"), # another project's daemon
         (12, "/usr/bin/python3 /managed/nudge_daemon.py"),
         (20, "vim nudge_daemon.py.swp"),
         (21, "/bin/zsh -c eval python3 ... nudge_daemon.py ..."),
@@ -260,12 +260,12 @@ class TestStrays(StoreCase):
 
     def test_finds_hand_started_daemons(self):
         found = [pid for pid, _ in self.install.strays(managed_pid=12, table=self.TABLE)]
-        self.assertEqual(found, [10, 11])
+        self.assertEqual(found, [10])
 
     def test_ignores_commands_that_merely_name_the_file(self):
         # the first version of this check flagged its own shell heredoc
         found = [pid for pid, _ in self.install.strays(managed_pid=12, table=self.TABLE)]
-        for innocent in (20, 21, 22):
+        for innocent in (11, 20, 21, 22):
             self.assertNotIn(innocent, found)
 
     def test_excludes_the_managed_daemon(self):
@@ -358,8 +358,10 @@ class TestSound(unittest.TestCase):
         import notify
         self.assertEqual(notify.sound_name({}), "Ping")
         self.assertEqual(notify.sound_name({"NUDGE_SOUND": "Glass"}), "Glass")
-        for off in ("", "none", "OFF", " none "):
+        for off in ("none", "OFF", " none "):
             self.assertIsNone(notify.sound_name({"NUDGE_SOUND": off}))
+        for blank in ("", "  "):
+            self.assertEqual(notify.sound_name({"NUDGE_SOUND": blank}), "Ping")
 
 
 class TestNotifierLookup(unittest.TestCase):
@@ -556,8 +558,16 @@ class TestInstall(StoreCase):
         self.assertIsNone(self.install.plist_program())
 
     def test_repair_command_names_this_clone(self):
-        self.assertIn(self.install.HERE, self.install.repair_command())
-        self.assertIn("install.py install", self.install.repair_command())
+        import shlex, sys
+        self.assertEqual(shlex.split(self.install.repair_command()),
+                         [sys.executable, os.path.join(self.install.HERE, "install.py"), "install"])
+
+    def test_repair_command_survives_spaces_and_quotes(self):
+        # the skill runs this verbatim, so it must split back into the same argv
+        import shlex
+        self.install.HERE = "/tmp/my clone's"
+        self.assertEqual(shlex.split(self.install.repair_command())[1],
+                         "/tmp/my clone's/install.py")
 
     # --- shims ---
 
