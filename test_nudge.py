@@ -5,6 +5,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import timespec
 
@@ -52,11 +53,16 @@ class TestHumanize(unittest.TestCase):
 
 class StoreCase(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["NUDGE_HOME"] = self.tmp.name
         import store
-        self.store = importlib.reload(store)
+        # cleanups run last-first: restore the env, then reload store against it,
+        # so no later test inherits a NUDGE_HOME that has already been deleted
+        self.addCleanup(importlib.reload, store)
+        self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        env = mock.patch.dict(os.environ, {"NUDGE_HOME": self.tmp.name})
+        env.start()
+        self.addCleanup(env.stop)
+        self.store = importlib.reload(store)
 
 
 class TestStore(StoreCase):
@@ -526,7 +532,7 @@ class TestInstall(StoreCase):
         self.assertTrue(round_tripped["KeepAlive"])
 
     def test_plist_paths_are_absolute(self):
-        body = self.install.plist_body()
+        body = self.install.plist_body(env={}, which_binary=lambda n: None)
         for key in ("WorkingDirectory", "StandardOutPath", "StandardErrorPath"):
             self.assertTrue(os.path.isabs(body[key]), key)
         self.assertTrue(os.path.isabs(body["ProgramArguments"][0]))

@@ -1,16 +1,18 @@
 # Inconsistencies
 
-Repo scan, 2026-10-07. Items keep their original numbers so earlier references still work.
-Line references are current as of the fixes below.
+Repo scan, 2026-10-07. **11/24 fixed.** Items keep their original numbers so earlier
+references still work. Line references are current as of the fixes below.
 
-| Category | Open | Fixed | Open # | Fixed # |
-|---|---|---|---|---|
-| Behaviour bugs | — | #9, #10, #12, #14, #15, #16 | 0 | 6 |
-| Wrong or stale docs | #2, #3, #6, #7, #11 | #1, #4, #5 | 5 | 3 |
-| Duplicated logic and hidden rules | #13, #17, #24 | — | 3 | 0 |
-| Test hygiene | #18, #19, #20, #21 | — | 4 | 0 |
-| Cosmetic | #8, #22, #23 | — | 3 | 0 |
-| **Total** | | | **15** | **9** |
+Counts are **fixed/found**: `2/2` means everything found is fixed.
+
+| Category | Fixed/found | Open | Fixed |
+|---|---|---|---|
+| Behaviour bugs | 6/6 | — | #9, #10, #12, #14, #15, #16 |
+| Wrong or stale docs | 3/8 | #2, #3, #6, #7, #11 | #1, #4, #5 |
+| Duplicated logic and hidden rules | 0/3 | #13, #17, #24 | — |
+| Test hygiene | 2/4 | #20, #21 | #18, #19 |
+| Cosmetic | 0/3 | #8, #22, #23 | — |
+| **Total** | **11/24** | | |
 
 Focus/DND stays an open, unverified item; it is not tracked here.
 
@@ -22,19 +24,20 @@ Rated by user impact. Fixed items (✓) are rated as they were before the fix.
 - **Medium:** misleads people, or could hide failures.
 - **Low:** wording, style or internal duplication.
 
+Each cell is **fixed/found**, then the items. `—` means nothing found.
+
 | Category | High | Medium | Low |
 |---|---|---|---|
-| Behaviour bugs | 2 (#14 ✓, #15 ✓) | 3 (#9 ✓, #10 ✓, #12 ✓) | 1 (#16 ✓) |
-| Wrong or stale docs | 0 | 1 (#4 ✓) | 7 (#1 ✓, #2, #3, #5 ✓, #6, #7, #11) |
-| Duplicated logic and hidden rules | 0 | 0 | 3 (#13, #17, #24) |
-| Test hygiene | 0 | 2 (#18, #19) | 2 (#20, #21) |
-| Cosmetic | 0 | 0 | 3 (#8, #22, #23) |
-| **Total** | **2** (0 open) | **6** (2 open) | **16** (13 open) |
+| Behaviour bugs | 2/2 (#14 ✓, #15 ✓) | 3/3 (#9 ✓, #10 ✓, #12 ✓) | 1/1 (#16 ✓) |
+| Wrong or stale docs | — | 1/1 (#4 ✓) | 2/7 (#1 ✓, #5 ✓, #2, #3, #6, #7, #11) |
+| Duplicated logic and hidden rules | — | — | 0/3 (#13, #17, #24) |
+| Test hygiene | — | 2/2 (#18 ✓, #19 ✓) | 0/2 (#20, #21) |
+| Cosmetic | — | — | 0/3 (#8, #22, #23) |
+| **Total** | **2/2** | **6/6** | **3/16** |
 
-Nothing rated High is still open, and every behaviour bug is fixed. The open Medium items,
-#18 and #19, are the next to fix.
+Every High and Medium item is fixed. All 13 open items are Low.
 
-## Behaviour bugs
+## Behaviour bugs (6/6)
 
 The program does the wrong thing.
 
@@ -60,7 +63,7 @@ The program does the wrong thing.
     is not running". `install.problem()` now names the actual reason: not installed,
     unreadable plist, program gone, or not loaded.
 
-## Wrong or stale docs
+## Wrong or stale docs (3/8)
 
 The docs say something untrue. Each open item is a one-line edit.
 
@@ -90,7 +93,7 @@ The docs say something untrue. Each open item is a one-line edit.
    give nudge its own sender identity; it now says it does. The Script Editor screenshot is
    labelled as delivery through the osascript fallback.
 
-## Duplicated logic and hidden rules
+## Duplicated logic and hidden rules (0/3)
 
 Works today, but could drift or mislead. Low priority.
 
@@ -103,23 +106,26 @@ Works today, but could drift or mislead. Low priority.
 24. **Hidden meaning for `sound=False`.** In `notify.commands`, `False` means "read it from the
     environment" and `None` means "silent", and no docstring says so.
 
-## Test hygiene
+## Test hygiene (2/4)
 
-#18 first: a leaked setting can hide failures in later tests.
+### Open
 
-18. **`StoreCase` leaks an environment variable.** It sets `os.environ["NUDGE_HOME"]`
-    (`test_nudge.py:56`) and never restores it, so later tests and modules see a temp
-    directory that has already been deleted.
-19. **A test depends on the machine.** `test_plist_paths_are_absolute`
-    (`test_nudge.py:528`) calls `plist_body()` without `env` or `which_binary`, so it uses
-    the real environment and the real `shutil.which`.
 20. **The test run prints install output.** `cmd_uninstall` writes to stdout during tests
     ("uninstalled. State in /var/folders/…"), which clutters the results.
 21. **`command()` has no real caller.** It is "kept for callers", but its only caller is a
-    test (`test_nudge.py:401`). (The other gaps listed here are now covered: `nan`/`inf`
+    test (`test_nudge.py:407`). (The other gaps listed here are now covered: `nan`/`inf`
     ticks, an empty `NUDGE_SOUND`, and the `status` exit code.)
 
-## Cosmetic
+### Fixed
+
+18. **`StoreCase` leaked `NUDGE_HOME`.** It set `os.environ["NUDGE_HOME"]` and never restored
+    it, so later tests saw a deleted temp folder and your own setting was overwritten. It
+    now uses `mock.patch.dict` and reloads `store` after the environment is restored.
+19. **A test depended on the machine.** `test_plist_paths_are_absolute` called
+    `plist_body()` with the real environment and `shutil.which`. It now passes `env={}` and
+    `which_binary`, like the other plist tests.
+
+## Cosmetic (0/3)
 
 Wording and formatting. Low priority.
 
