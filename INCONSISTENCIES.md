@@ -5,12 +5,12 @@ Line references are current as of the fixes below.
 
 | Category | Open | Fixed | Open # | Fixed # |
 |---|---|---|---|---|
-| Behaviour bugs | #9, #16 | #10, #12, #14, #15 | 2 | 4 |
+| Behaviour bugs | — | #9, #10, #12, #14, #15, #16 | 0 | 6 |
 | Wrong or stale docs | #2, #3, #6, #7, #11 | #1, #4, #5 | 5 | 3 |
 | Duplicated logic and hidden rules | #13, #17, #24 | — | 3 | 0 |
 | Test hygiene | #18, #19, #20, #21 | — | 4 | 0 |
 | Cosmetic | #8, #22, #23 | — | 3 | 0 |
-| **Total** | | | **17** | **7** |
+| **Total** | | | **15** | **9** |
 
 Focus/DND stays an open, unverified item; it is not tracked here.
 
@@ -24,34 +24,25 @@ Rated by user impact. Fixed items (✓) are rated as they were before the fix.
 
 | Category | High | Medium | Low |
 |---|---|---|---|
-| Behaviour bugs | 2 (#14 ✓, #15 ✓) | 3 (#9, #10 ✓, #12 ✓) | 1 (#16) |
+| Behaviour bugs | 2 (#14 ✓, #15 ✓) | 3 (#9 ✓, #10 ✓, #12 ✓) | 1 (#16 ✓) |
 | Wrong or stale docs | 0 | 1 (#4 ✓) | 7 (#1 ✓, #2, #3, #5 ✓, #6, #7, #11) |
 | Duplicated logic and hidden rules | 0 | 0 | 3 (#13, #17, #24) |
 | Test hygiene | 0 | 2 (#18, #19) | 2 (#20, #21) |
 | Cosmetic | 0 | 0 | 3 (#8, #22, #23) |
-| **Total** | **2** (0 open) | **6** (3 open) | **16** (14 open) |
+| **Total** | **2** (0 open) | **6** (2 open) | **16** (13 open) |
 
-Nothing rated High is still open. The open Medium items, #9, #18 and #19, are the next
-to fix.
+Nothing rated High is still open, and every behaviour bug is fixed. The open Medium items,
+#18 and #19, are the next to fix.
 
 ## Behaviour bugs
 
 The program does the wrong thing.
 
-### Open
-
-9. **`install.py status` and `nudge status` behave differently.** README says `status` exits
-   non-zero when the daemon won't fire, and lists `status` under `install.py`
-   (`README.md:222`). Only `nudge status` does that; `install.py`'s `cmd_status`
-   (`install.py:406`) always exits 0.
-16. **`nudge status` gives the same message for every failure.** `nudge.py:54` always says
-    "the daemon is not running", even when the real state is "not installed" or "program is
-    gone".
-
-Both are in `status`, so they could be one small change.
-
 ### Fixed
 
+9. **`install.py status` and `nudge status` behaved differently.** README says `status`
+   exits non-zero when nothing would fire, but `install.py status` always exited 0. Both
+   now run `install.cmd_status`, which exits 1 and prints the repair command.
 10. **A bad `NUDGE_TICK` could cause a restart loop.** `tick_seconds` accepted `nan` and
     `inf`, then `time.sleep` raised, so launchd kept restarting the daemon. Nudges still
     fired (each restart swept the queue first), but the logs grew every 10s and `status`
@@ -65,6 +56,9 @@ Both are in `status`, so they could be one small change.
 15. **`status` could tell you to kill an unrelated process.** The old `daemon.py` name
     matched any Python process running a file with that name. Only `nudge_daemon.py` is
     matched now.
+16. **`nudge status` gave the same message for every failure.** It always said "the daemon
+    is not running". `install.problem()` now names the actual reason: not installed,
+    unreadable plist, program gone, or not loaded.
 
 ## Wrong or stale docs
 
@@ -105,7 +99,7 @@ Works today, but could drift or mislead. Low priority.
     `/opt/homebrew/bin` and `/usr/local/bin`, and checks that the binary is executable. The
     install step could just call `find_notifier`.
 17. **Repeated launchctl target.** `"%s/%s" % (_domain(), LABEL)` is built four times in
-    `install.py` (`:116`, `:182`, `:250`, `:369`).
+    `install.py` (`:116`, `:182`, `:250`, `:382`).
 24. **Hidden meaning for `sound=False`.** In `notify.commands`, `False` means "read it from the
     environment" and `None` means "silent", and no docstring says so.
 
@@ -121,9 +115,9 @@ Works today, but could drift or mislead. Low priority.
     the real environment and the real `shutil.which`.
 20. **The test run prints install output.** `cmd_uninstall` writes to stdout during tests
     ("uninstalled. State in /var/folders/…"), which clutters the results.
-21. **Some edge cases have no tests:** `install.py status`'s exit code (#9) and `command()`.
-    `command()` is "kept for callers", but its only caller is a test (`test_nudge.py:401`).
-    (`nan`/`inf` ticks and an empty `NUDGE_SOUND` are now covered.)
+21. **`command()` has no real caller.** It is "kept for callers", but its only caller is a
+    test (`test_nudge.py:401`). (The other gaps listed here are now covered: `nan`/`inf`
+    ticks, an empty `NUDGE_SOUND`, and the `status` exit code.)
 
 ## Cosmetic
 

@@ -106,7 +106,7 @@ There is no API to take a banner back.
 - `install.healthy()` checks the LaunchAgent's program still exists, not just that the
   job is loaded: a moved clone leaves a job `launchctl` reports as loaded until it next
   tries to start it.
-- `nudge status` duplicates `install.py status` so the skill only needs one command; on
+- `nudge status` runs the same code as `install.py status` so the skill only needs one command; on
   an unhealthy install it prints a repair command carrying the clone path, which is known
   at runtime from the shim rather than from any committed file.
 

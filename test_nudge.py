@@ -548,6 +548,50 @@ class TestInstall(StoreCase):
         self.assertEqual(self.install.plist_program(), os.path.join(self.tmp.name, "gone"))
         self.assertFalse(self.install.healthy())
 
+    def test_problem_names_each_reason_nothing_would_fire(self):
+        import plistlib
+        self._sandbox()
+        loaded = {"yes": False}
+        self.install.is_loaded = lambda: loaded["yes"]
+        self.assertEqual(self.install.problem(), "nudge is not installed")
+        with open(self.install.PLIST, "w") as f:
+            f.write("not a plist")
+        self.assertIn("unreadable", self.install.problem())
+        gone = os.path.join(self.tmp.name, "gone")
+        with open(self.install.PLIST, "wb") as f:
+            plistlib.dump({"ProgramArguments": [gone]}, f)
+        self.assertIn("program is gone", self.install.problem())
+        self.assertIn(gone, self.install.problem())
+        with open(gone, "w"):
+            pass
+        self.assertEqual(self.install.problem(), "the daemon is installed but not loaded")
+        loaded["yes"] = True
+        self.assertIsNone(self.install.problem())
+        self.assertTrue(self.install.healthy())
+
+    def test_status_exits_nonzero_with_the_reason_and_repair(self):
+        # install.py status and nudge status share this, so both exit 1 when unhealthy
+        import contextlib, io
+        import nudge
+        self._sandbox()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(self.install.cmd_status(None), 1)
+        self.assertIn("nudge is not installed -- nothing will fire", out.getvalue())
+        self.assertIn(self.install.repair_command(), out.getvalue())
+        self.addCleanup(setattr, nudge, "install", nudge.install)
+        nudge.install = self.install
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as exit_:
+            nudge.cmd_status(None)
+        self.assertEqual(exit_.exception.code, 1)
+
+    def test_status_exits_zero_when_healthy(self):
+        import contextlib, io
+        self._sandbox()
+        self.install.problem = lambda: None
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(self.install.cmd_status(None), 0)
+        self.assertNotIn("nothing will fire", out.getvalue())
+
     def test_plist_program_on_a_missing_or_corrupt_plist(self):
         self.install.PLIST = os.path.join(self.tmp.name, "nope.plist")
         self.assertIsNone(self.install.plist_program())

@@ -304,15 +304,28 @@ def plist_program():
         return None
 
 
-def healthy():
-    """True when a scheduled nudge would actually fire.
+def problem():
+    """Why a scheduled nudge would not fire, or None if it would.
 
     Checks the program still exists, not just that launchd has the job loaded:
     a clone that moved leaves a loaded job whose shim is gone, which launchd
     reports as healthy right up until it next tries to start it.
     """
+    if not os.path.exists(PLIST):
+        return "nudge is not installed"
     program = plist_program()
-    return bool(program) and os.path.exists(program) and is_loaded()
+    if not program:
+        return "the LaunchAgent plist is unreadable: %s" % PLIST
+    if not os.path.exists(program):
+        return "the daemon's program is gone (did the clone move?): %s" % program
+    if not is_loaded():
+        return "the daemon is installed but not loaded"
+    return None
+
+
+def healthy():
+    """True when a scheduled nudge would actually fire."""
+    return problem() is None
 
 
 def repair_command():
@@ -404,7 +417,13 @@ def status_report():
 
 
 def cmd_status(args):
+    """Print the report; exit non-zero with a repair command if nothing would fire."""
     print("\n".join(status_report()))
+    why = problem()
+    if why:
+        print("\n%s -- nothing will fire. to repair:\n  %s" % (why, repair_command()))
+        return 1
+    return 0
 
 
 def _shim_target(path):

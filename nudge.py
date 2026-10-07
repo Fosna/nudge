@@ -49,10 +49,7 @@ def cmd_status(args):
     Lives on the CLI as well as on install.py so the Claude Code skill only ever
     has to know one command.
     """
-    print("\n".join(install.status_report()))
-    if not install.healthy():
-        print("\nthe daemon is not running -- nothing will fire. to repair:\n  %s"
-              % install.repair_command())
+    if install.cmd_status(args):
         sys.exit(1)
 
 
