@@ -178,6 +178,25 @@ System Settings > Notifications > terminal-notifier > Alert Style > **Persistent
 On macOS 26 the choice is Temporary / Persistent; older versions call the same thing
 Banners / Alerts. `terminal-notifier -diagnose` prints the style currently in effect.
 
+## peon-ping overlay
+
+If [peon-ping](https://www.peonping.com/) is installed at `~/.claude/hooks/peon-ping`, a
+nudge also puts up its large on-screen overlay and plays the peon line "Something need
+doing?" at peon-ping's volume. The overlay stays up until you click it. It follows
+peon-ping's theme and position, sitting in its own rows below peon-ping's own overlays.
+
+The banner is still posted, silently, so Notification Center keeps a record of the
+reminder after the overlay is gone. If the overlay cannot start, the banner plays its
+usual sound instead. `NUDGE_SOUND=none` silences the peon line too.
+
+```bash
+NUDGE_STYLE=banner python3 install.py install              # banner only
+NUDGE_PEON_DIR=/path/to/peon-ping python3 install.py install   # non-default install
+```
+
+Like `NUDGE_TICK`, both are read at install time. Overlays run in their own session, so
+re-installing nudge does not close one that is waiting for its click.
+
 ## Troubleshooting
 
 ```bash
@@ -185,7 +204,8 @@ nudge status        # daemon, shims, and the skill link
 head -1 ~/.nudge/daemon.log   # what the daemon resolved at startup
 ```
 
-That first log line names the tick, the sender, the sound and the queue path. If it says
+That first log line names the tick, the sender, the peon-ping overlay (or `none`), the
+sound and the queue path. If it says
 `sender osascript (terminal-notifier not found)` while your shell finds the binary fine,
 the daemon's PATH is the reason — re-run `python3 install.py install` from a shell that
 can see it.
@@ -220,7 +240,7 @@ not match, because the command line carries the resolved interpreter path rather
 | `nudge_daemon.py` | tick loop; fires due jobs |
 | `store.py` | JSON queue, atomic writes under an flock |
 | `timespec.py` | duration parsing and relative-time display |
-| `notify.py` | delivers one notification: `terminal-notifier`, falling back to `osascript` |
+| `notify.py` | delivers one notification: `terminal-notifier`, falling back to `osascript`; plus peon-ping's overlay when installed |
 | `install.py` | `install`, `uninstall`, `status` |
 | `.claude/skills/nudge/SKILL.md` | the Claude Code skill |
 | `.claude/skills/audit-loop/SKILL.md` | project-only skill for audit-and-fix passes on this repo |

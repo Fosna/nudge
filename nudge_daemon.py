@@ -70,10 +70,15 @@ def startup_banner(env=None):
     sender turns "notifications behave oddly" into one line of log.
     """
     notifier = notify.find_notifier(env)
-    return "nudge daemon: tick %gs, sender %s, sound %s, queue %s" % (
+    peon = notify.find_peon(env)
+    sound = notify.sound_name(env)
+    if sound and peon:
+        sound = os.path.basename(notify.PEON_LINE)
+    return "nudge daemon: tick %gs, sender %s, overlay %s, sound %s, queue %s" % (
         tick_seconds(env),
         notifier or "osascript (terminal-notifier not found)",
-        notify.sound_name(env) or "none",
+        peon or "none",
+        sound or "none",
         store.QUEUE,
     )
 

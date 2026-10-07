@@ -7,7 +7,8 @@ independent of whether the session is still alive.
 
 - **Name:** `nudge`
 - **Stack:** Python
-- **Delivery:** `terminal-notifier`, fallback `osascript`
+- **Delivery:** `terminal-notifier`, fallback `osascript`; plus peon-ping's overlay and
+  voice line when peon-ping is installed (`NUDGE_STYLE=banner` opts out)
 - **Scheduler:** long-running daemon + persistent job queue (survives session exit)
 - **Interface:** CLI (`nudge in 10m "build done"`) + a Claude Code skill wrapping it
 - **Process mgmt:** LaunchAgent keeps the daemon alive
@@ -37,6 +38,11 @@ Built:
   it does not schedule and holds no state. Chooses its sender by outcome, not
   availability: a sender that exits non-zero is retried with the next one. Plays
   `NUDGE_SOUND` (default `Ping`, also when empty; `none` or `off` silences).
+  With peon-ping installed it first starts peon's overlay (until clicked) and the
+  "Something need doing?" line without waiting, then posts the banner silently. The
+  overlay script is piped to `osascript` rather than named, because peon-ping kills any
+  `mac-overlay` process older than a minute. Nudge overlays use slots 5-9, below
+  peon-ping's 0-4, since a click dismisses every overlay sharing a slot.
 - `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link.
   Uninstall is best-effort-then-verify, not transactional: rolling back a delete would
   mean recreating what was just removed, and a half-done uninstall is better finished

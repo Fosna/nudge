@@ -67,13 +67,15 @@ def daemon_env(env=None, which=None):
     """The nudge settings to bake into the plist.
 
     A launchd agent inherits nothing from the shell that installed it, so a
-    `NUDGE_TICK`, `NUDGE_HOME` or `NUDGE_SOUND` exported in a terminal would
-    otherwise reach the CLI and not the daemon -- the daemon would sweep a different queue, or at a
-    different interval, than the one the user thinks they configured. Whatever is
+    `NUDGE_TICK`, `NUDGE_HOME`, `NUDGE_SOUND`, `NUDGE_STYLE` or `NUDGE_PEON_DIR`
+    exported in a terminal would otherwise reach the CLI and not the daemon -- the
+    daemon would sweep a different queue, or at a different interval, than the one
+    the user thinks they configured. Whatever is
     set at install time is captured here; changing it means re-installing.
     """
     env = os.environ if env is None else env
-    settings = {k: env[k] for k in ("NUDGE_TICK", "NUDGE_HOME", "NUDGE_SOUND")
+    settings = {k: env[k] for k in ("NUDGE_TICK", "NUDGE_HOME", "NUDGE_SOUND",
+                                    "NUDGE_STYLE", "NUDGE_PEON_DIR")
                 if env.get(k) is not None and env[k] != ""}
     notifier = notify.find_notifier(env, which=which or shutil.which)
     if notifier:

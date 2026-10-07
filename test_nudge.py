@@ -3,6 +3,7 @@
 import contextlib
 import importlib
 import io
+import json
 import os
 import tempfile
 import time
@@ -10,6 +11,14 @@ import unittest
 from unittest import mock
 
 import timespec
+
+
+def setUpModule():
+    # notify.send looks for peon-ping by default; on a machine that has it, a test
+    # calling send would put a real overlay on screen and play a real voice line
+    guard = mock.patch.dict(os.environ, {"NUDGE_STYLE": "banner"})
+    guard.start()
+    unittest.addModuleCleanup(guard.stop)
 
 
 class _StopLoop(Exception):
@@ -192,6 +201,15 @@ class TestDaemon(StoreCase):
         self.assertIn("tick 30s", line)
         self.assertIn("sound none", line)
 
+    def test_startup_banner_names_the_overlay_and_its_line(self):
+        with tempfile.TemporaryDirectory() as home:
+            os.makedirs(os.path.join(home, "scripts"))
+            open(os.path.join(home, "scripts", "mac-overlay.js"), "w").close()
+            line = self.daemon.startup_banner({"NUDGE_PEON_DIR": home})
+        self.assertIn("overlay " + home, line)
+        self.assertIn("sound PeonWhat4.wav", line)
+        self.assertIn("overlay none", self.daemon.startup_banner({"NUDGE_STYLE": "banner"}))
+
     def test_overdue_backlog_fires_on_next_tick(self):
         # daemon was down, or the lid was shut, past both fire times
         self.store.add("a", 100.0)
@@ -248,6 +266,11 @@ class TestDaemonEnv(StoreCase):
     def test_no_notifier_pinned_when_none_installed(self):
         body = self.install.plist_body(env={}, which_binary=lambda n: None)
         self.assertNotIn("NUDGE_NOTIFIER", body.get("EnvironmentVariables", {}))
+
+    def test_overlay_settings_are_propagated(self):
+        env = {"NUDGE_STYLE": "banner", "NUDGE_PEON_DIR": "/opt/peon"}
+        body = self.install.plist_body(env=env, which_binary=lambda n: None)
+        self.assertEqual(body["EnvironmentVariables"], env)
 
     def test_sound_is_propagated(self):
         body = self.install.plist_body(env={"NUDGE_SOUND": "Glass"},
@@ -433,6 +456,109 @@ class TestNotifyCommand(unittest.TestCase):
         notify.send("t", "m", runner=lambda argv, **kw: calls.append(argv),
                     which=lambda n: None)
         self.assertEqual(len(calls), 1)
+
+
+class TestPeonOverlay(unittest.TestCase):
+    """peon-ping's overlay and voice line, when it is installed."""
+
+    class _Proc:
+        def __init__(self, done=False):
+            self.done = done
+
+        def poll(self):
+            return 0 if self.done else None
+
+    def setUp(self):
+        import notify
+        self.notify = notify
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = self.tmp.name
+        os.makedirs(os.path.join(self.home, "scripts"))
+        os.makedirs(os.path.dirname(os.path.join(self.home, notify.PEON_LINE)))
+        for rel in ("scripts/mac-overlay.js", notify.PEON_LINE):
+            with open(os.path.join(self.home, rel), "w") as f:
+                f.write("x")
+        overlays = mock.patch.object(notify, "_overlays", {})
+        children = mock.patch.object(notify, "_children", [])
+        overlays.start(), children.start()
+        self.addCleanup(overlays.stop)
+        self.addCleanup(children.stop)
+        self.spawned = []
+
+    def spawn(self, argv, **kw):
+        self.spawned.append((argv, kw))
+        return self._Proc()
+
+    def config(self, **values):
+        with open(os.path.join(self.home, "config.json"), "w") as f:
+            json.dump(values, f)
+
+    def test_found_by_its_overlay_script(self):
+        self.assertEqual(self.notify.find_peon({"NUDGE_PEON_DIR": self.home}), self.home)
+        self.assertIsNone(self.notify.find_peon({"NUDGE_PEON_DIR": "/nope"}))
+
+    def test_banner_style_opts_out(self):
+        env = {"NUDGE_PEON_DIR": self.home, "NUDGE_STYLE": " Banner "}
+        self.assertIsNone(self.notify.find_peon(env))
+
+    def test_overlay_waits_for_a_click_and_never_names_its_script(self):
+        argv = self.notify.overlay_command("ops", "deploy", 5)
+        self.assertEqual(argv[:4], ["osascript", "-l", "JavaScript", "-"])
+        self.assertEqual(argv[4], "deploy")  # the reminder is the headline
+        self.assertEqual(argv[8], "0")       # dismiss 0: until clicked
+        self.assertEqual(argv[12], "ops")
+        self.assertFalse(any("mac-overlay" in a for a in argv))
+
+    def test_send_plays_the_line_and_silences_the_banner(self):
+        self.config(volume=0.3)
+        calls = []
+        self.notify.send("t", "m", which=lambda n: None, sound="Ping", peon=self.home,
+                         spawn=self.spawn, runner=lambda a, **k: calls.append(a))
+        overlay, sound = [argv for argv, _ in self.spawned]
+        self.assertEqual(overlay[4], "m")
+        self.assertEqual(sound[:3], ["afplay", "-v", "0.3"])
+        self.assertTrue(sound[-1].endswith("PeonWhat4.wav"))
+        self.assertTrue(all(kw["start_new_session"] for _, kw in self.spawned))
+        self.assertNotIn("sound name", " ".join(calls[0]))  # banner kept, silent
+
+    def test_silent_setting_silences_the_line_too(self):
+        self.notify.send("t", "m", which=lambda n: None, sound=None, peon=self.home,
+                         spawn=self.spawn, runner=lambda a, **k: None)
+        self.assertEqual(len(self.spawned), 1)
+
+    def test_banner_keeps_its_sound_when_the_overlay_cannot_start(self):
+        def broken(argv, **kw):
+            raise OSError("no osascript")
+        calls = []
+        self.notify.send("t", "m", which=lambda n: None, sound="Ping", peon=self.home,
+                         spawn=broken, runner=lambda a, **k: calls.append(a))
+        self.assertIn("sound name", " ".join(calls[0]))
+
+    def test_overlays_on_screen_get_their_own_rows_below_peons(self):
+        for _ in range(2):
+            self.notify.show_peon("t", "m", self.home, with_sound=False, spawn=self.spawn)
+        self.assertEqual([argv[7] for argv, _ in self.spawned], ["5", "6"])
+
+    def test_a_clicked_away_overlay_frees_its_row(self):
+        self.notify.show_peon("t", "m", self.home, with_sound=False, spawn=self.spawn)
+        self.notify._overlays[5].done = True
+        self.notify.show_peon("t", "m", self.home, with_sound=False, spawn=self.spawn)
+        self.assertEqual([argv[7] for argv, _ in self.spawned], ["5", "5"])
+
+    def test_configured_theme_and_position_are_used(self):
+        self.config(overlay_theme="glass", notification_position="bottom-right")
+        with open(os.path.join(self.home, "scripts", "mac-overlay-glass.js"), "w") as f:
+            f.write("x")
+        self.assertTrue(self.notify.overlay_script(self.home).endswith("mac-overlay-glass.js"))
+        self.notify.show_peon("t", "m", self.home, with_sound=False, spawn=self.spawn)
+        self.assertEqual(self.spawned[0][0][13], "bottom-right")
+
+    def test_bad_config_falls_back(self):
+        with open(os.path.join(self.home, "config.json"), "w") as f:
+            f.write("{not json")
+        self.notify.show_peon("t", "m", self.home, spawn=self.spawn)
+        self.assertEqual(self.spawned[1][0][2], "0.5")
 
 
 def read(path):
