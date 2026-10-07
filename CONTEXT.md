@@ -44,6 +44,8 @@ Built:
   exits non-zero if any survived so `uninstall && rm -rf ~/.nudge` cannot delete a live
   daemon's queue.
 - `.claude/skills/nudge/SKILL.md` — the Claude Code skill wrapping the CLI
+- `.claude/skills/audit-loop/SKILL.md` — project-only skill: the gated audit loop
+  (identify, categorize, prioritize, deep dive, fix, repeat). Not linked globally.
 - `test_nudge.py` — the unittest suite. Run it after every change:
   `python3 -m unittest test_nudge`.
 - `README.md` — Claude Code usage, install, design, troubleshooting, known gaps

@@ -223,6 +223,7 @@ not match, because the command line carries the resolved interpreter path rather
 | `notify.py` | delivers one notification: `terminal-notifier`, falling back to `osascript` |
 | `install.py` | `install`, `uninstall`, `status` |
 | `.claude/skills/nudge/SKILL.md` | the Claude Code skill |
+| `.claude/skills/audit-loop/SKILL.md` | project-only skill for audit-and-fix passes on this repo |
 | `test_nudge.py` | the test suite |
 
 State lives in `~/.nudge/` — `queue.json`, plus `daemon.log` and `daemon.err`. Set
