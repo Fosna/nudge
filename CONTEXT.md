@@ -33,8 +33,11 @@ Built:
 - `store.py` — JSON queue at `~/.nudge/queue.json` (`NUDGE_HOME` overrides). This is
   where scheduling lives.
 - `timespec.py` — duration parsing and relative-time display
-- `notify.py` — delivery only. Puts one notification on screen, synchronously, right
-  now; it does not schedule and holds no state.
+- `notify.py` — delivery only. Plays `NUDGE_SOUND` (default `Ping`, `none` silences).
+  Chooses its sender by outcome, not availability: a sender that exits non-zero is retried
+  with the next one. Puts one notification on screen, synchronously, right
+  now; it does not schedule and holds no state. Tries each sender in turn and falls back
+  on a non-zero exit, not merely on absence.
 - `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link
 - `.claude/skills/nudge/SKILL.md` — the Claude Code skill wrapping the CLI
 - `test_nudge.py` — 53 unittest cases
@@ -60,10 +63,25 @@ There is no API to take a banner back.
 - Notification text is always passed as argv, never interpolated into a script body.
 - Clock and sender are injectable (`run_once(now, send=...)`) so tests never sleep.
 - `humanize()` rounds up, so a job just set for 20m lists as `20m`, not `19m59s`.
-- `NUDGE_TICK` / `NUDGE_HOME` are captured into the plist's `EnvironmentVariables` at
-  install time: launchd inherits nothing from the installing shell, so a shell-exported
-  value would otherwise reach the CLI and not the daemon — leaving the daemon sweeping a
-  different queue, or at a different interval, than the user configured.
+- **Resolve in the installing shell, never in the daemon.** launchd gives an agent
+  `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `HOME`, and nothing else — not the user's profile,
+  not Homebrew, not anything they exported. Two failure modes follow, and this project has
+  hit both:
+    1. *Config never arrives.* `NUDGE_TICK=30` in a shell reaches the CLI and not the
+       daemon. Hence `NUDGE_TICK` / `NUDGE_HOME` / `NUDGE_SOUND` are captured into the
+       plist's `EnvironmentVariables` at install time.
+    2. *Lookups resolve differently.* `shutil.which("terminal-notifier")` returns a path
+       in any shell and `None` in the daemon, so every scheduled nudge silently delivered
+       through osascript — same text, same sound, attributed to Script Editor, so the
+       notification style set on terminal-notifier never applied. Hence `NUDGE_NOTIFIER`
+       is pinned into the plist too, with `shutil.which` and a scan of
+       `/opt/homebrew/bin` and `/usr/local/bin` behind it.
+  Both failed silently behind a working-looking fallback, which is what made them
+  expensive. Anything added later that shells out to a non-system binary will reproduce
+  this; resolve it at install time and write the absolute path into the plist.
+- The daemon prints `startup_banner()` as the first line of `daemon.log` — resolved tick,
+  sender, sound and queue path. It exists because both failures above were invisible until
+  a notification behaved subtly wrong; one read of that line now names the cause.
 - A bad `NUDGE_TICK` warns and falls back to 15s rather than raising; under `KeepAlive`,
   exiting on malformed config would be a restart loop.
 - `install.strays()` matches on argv shape — a python interpreter invoked against a file
@@ -93,7 +111,12 @@ There is no API to take a banner back.
   *Troubleshooting:* "scheduled, never arrived, not in `nudge list`" = this window, not a bug
   in parsing or the LaunchAgent. *If this ever needs to change:* claim into an `inflight` list,
   delete after send, re-queue leftovers at daemon startup.
-- Sleep/wake, Focus/DND and a real `terminal-notifier` binary are still unverified by hand.
+- Focus/DND is the last behaviour unverified by hand. `terminal-notifier -ignoreDnD`
+  exists and is untried; it is best-effort per its own help text.
+- Banner dwell time is macOS's, not ours: Banners auto-dismiss in ~5s, Alerts persist, set
+  per delivering app in System Settings. Under the osascript fallback that app is Script
+  Editor, so the style cannot be set for nudge alone — `terminal-notifier` would register
+  its own sender identity and fix that.
 - A hand-started daemon steals jobs from the managed one and fires them on its own
   interval. `nudge status` now reports strays, but nothing prevents one.
 
@@ -101,6 +124,22 @@ There is no API to take a banner back.
 
 `NUDGE_TICK` added, default 15s (was a hard-coded 1s). Captured into the plist at
 install time because launchd inherits nothing from the installing shell.
+
+Sleep/wake confirmed by the user on 2026-10-07: a nudge fired after closing the lid.
+`terminal-notifier` authorized and now the live delivery path, confirmed end to end
+through the daemon. Getting there needed `open -a <bundle>`: running the binary straight
+from the Cellar never registered the app with LaunchServices, so macOS reported
+"authorization not requested yet" and showed no prompt. One `open -a` registered it and
+the prompt appeared.
+
+Sound confirmed audible through the daemon on 2026-10-07. Persistence is a macOS
+per-app setting, not something nudge can set: System Settings > Notifications >
+terminal-notifier > Alert Style > Persistent (Temporary/Persistent on macOS 26, the
+older Banners/Alerts). Now reads `alerts (stay until dismissed)`.
+
+Banner visibility confirmed the same day from a screenshot: title `nudge`, the message
+body, Script Editor's icon, rendered as an Alert with a close button rather than a
+self-dismissing banner.
 
 Verified by hand: with only the managed daemon running, three `nudge in 1s` samples
 fired after 3s, 16s and 15s — consistent with a 15s sweep. `NUDGE_TICK=60 install`

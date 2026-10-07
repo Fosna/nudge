@@ -39,16 +39,46 @@ def tick_seconds(env=None):
     return value
 
 
+def _log_failure(job, outcome):
+    """Record a nudge that no sender could deliver.
+
+    The job is already out of the queue by now, so this line in `daemon.err` is
+    the only trace it ever existed. Tolerates a `send` that returns anything
+    other than notify's (argv, detail) pair, so test doubles stay simple.
+    """
+    if not (isinstance(outcome, tuple) and len(outcome) == 2 and outcome[0] is None):
+        return
+    for line in notify.describe_failure(outcome[1]):
+        print("nudge: lost %r -- %s" % (job["message"], line), file=sys.stderr)
+
+
 def run_once(now=None, send=notify.send):
     """Fire everything due at `now`. Returns the jobs fired."""
     now = time.time() if now is None else now
     due = store.claim_due(now)
     for job in due:
-        send(job["title"], job["message"])
+        _log_failure(job, send(job["title"], job["message"]))
     return due
 
 
+def startup_banner(env=None):
+    """What this daemon resolved, for the first line of `daemon.log`.
+
+    launchd hands an agent a bare PATH, so a tool that every shell can find may
+    be invisible here -- and delivery falls back silently. Printing the resolved
+    sender turns "notifications behave oddly" into one line of log.
+    """
+    notifier = notify.find_notifier(env)
+    return "nudge daemon: tick %gs, sender %s, sound %s, queue %s" % (
+        tick_seconds(env),
+        notifier or "osascript (terminal-notifier not found)",
+        notify.sound_name(env) or "none",
+        store.QUEUE,
+    )
+
+
 def run_forever(tick=None, clock=time.time, sleep=time.sleep, send=notify.send):
+    print(startup_banner(), flush=True)
     tick = tick_seconds() if tick is None else tick
     while True:
         run_once(clock(), send=send)

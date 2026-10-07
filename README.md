@@ -135,11 +135,58 @@ if it isn't.
 For nicer notifications, `brew install terminal-notifier`. Without it `nudge` falls back
 to `osascript`, which works but gives you Script Editor's icon and no click actions.
 
+**Installing it is not enough.** macOS must also grant it permission, and until that
+happens it exits 3 — `Could not request notification permission` — and delivers nothing.
+`nudge` picks its sender by *outcome*, not by what is installed: a sender that exits
+non-zero is retried with the next one, so an unpermitted `terminal-notifier` costs you a
+wasted exec and nothing else. If every sender fails, the line lands in
+`~/.nudge/daemon.err` — the job is already out of the queue by then, so that log is the
+only trace it existed.
+
+To grant it, register the bundle with LaunchServices once:
+
+```bash
+open -a "$(brew --prefix)/opt/terminal-notifier/terminal-notifier.app" --args -message hi
+```
+
+Running the binary directly will not do it — macOS reports `authorization not requested
+yet` and never prompts, because the app was never launched as a registered app.
+`terminal-notifier -diagnose` tells you which state you are in. After the prompt, allow
+it, or flip it under System Settings > Notifications. Once permitted it carries its own sender
+identity, which is what lets you set Alerts for nudge alone instead of for Script Editor.
+
+## Sound and persistence
+
+Nudges play `Ping` by default. Pick another from `/System/Library/Sounds`, or silence
+them, at install time:
+
+```bash
+NUDGE_SOUND=Glass python3 install.py install   # Basso Blow Bottle Frog Funk Glass Hero
+NUDGE_SOUND=none  python3 install.py install   # Morse Ping Pop Purr Sosumi Submarine Tink
+```
+
+Like `NUDGE_TICK`, it has to be set when you install — the daemon cannot see your shell.
+
+**Whether a notification stays on screen is macOS's call, not nudge's.** There is no flag
+for it; `terminal-notifier -timeout` is unrelated (it waits for an `-action` or `-reply`
+response). Set it per app:
+
+System Settings > Notifications > terminal-notifier > Alert Style > **Persistent**
+
+On macOS 26 the choice is Temporary / Persistent; older versions call the same thing
+Banners / Alerts. `terminal-notifier -diagnose` prints the style currently in effect.
+
 ## Troubleshooting
 
 ```bash
 nudge status        # daemon, both shims, and the skill link
+head -1 ~/.nudge/daemon.log   # what the daemon resolved at startup
 ```
+
+That first log line names the tick, the sender, the sound and the queue path. If it says
+`sender osascript (terminal-notifier not found)` while your shell finds the binary fine,
+the daemon's PATH is the reason — re-run `python3 install.py install` from a shell that
+can see it.
 
 It exits non-zero and prints the repair command if the daemon won't fire. To find the
 process yourself:

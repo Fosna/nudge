@@ -151,6 +151,39 @@ class TestDaemon(StoreCase):
             self.daemon.run_forever(clock=lambda: 0.0, sleep=sleep, send=self.send)
         self.assertEqual(slept, [15.0])
 
+    def test_lost_notification_is_logged(self):
+        import contextlib, io, notify
+        self.store.add("vanished", 500.0)
+        failed = (None, [(["terminal-notifier"], type("R", (), {"returncode": 3,
+                                                               "stderr": b"not allowed"})())])
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.daemon.run_once(1000.0, send=lambda t, m: failed)
+        self.assertIn("lost 'vanished'", err.getvalue())
+        self.assertIn("not allowed", err.getvalue())
+
+    def test_simple_send_double_is_not_treated_as_failure(self):
+        import contextlib, io
+        self.store.add("fine", 500.0)
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.daemon.run_once(1000.0, send=self.send)
+        self.assertEqual(err.getvalue(), "")
+
+    def test_startup_banner_names_the_resolved_sender(self):
+        line = self.daemon.startup_banner(
+            {"NUDGE_NOTIFIER": "/opt/homebrew/bin/terminal-notifier"})
+        self.assertIn("terminal-notifier", line)
+
+    def test_startup_banner_admits_the_fallback(self):
+        # the line that would have caught the PATH bug in one read
+        line = self.daemon.startup_banner({"NUDGE_NOTIFIER": "/gone/terminal-notifier"})
+        self.assertIn("osascript", line)
+        self.assertIn("not found", line)
+
+    def test_startup_banner_reports_tick_and_sound(self):
+        line = self.daemon.startup_banner({"NUDGE_TICK": "30", "NUDGE_SOUND": "none"})
+        self.assertIn("tick 30s", line)
+        self.assertIn("sound none", line)
+
     def test_overdue_backlog_fires_on_next_tick(self):
         # daemon was down, or the lid was shut, past both fire times
         self.store.add("a", 100.0)
@@ -167,19 +200,44 @@ class TestDaemonEnv(StoreCase):
 
     def test_settings_are_baked_into_the_plist(self):
         # launchd inherits nothing from the installing shell
-        body = self.install.plist_body(env={"NUDGE_TICK": "30", "NUDGE_HOME": "/tmp/q"})
+        body = self.install.plist_body(env={"NUDGE_TICK": "30", "NUDGE_HOME": "/tmp/q"},
+                                       which_binary=lambda n: None)
         self.assertEqual(body["EnvironmentVariables"],
                          {"NUDGE_TICK": "30", "NUDGE_HOME": "/tmp/q"})
 
     def test_no_env_block_when_nothing_is_set(self):
-        self.assertNotIn("EnvironmentVariables", self.install.plist_body(env={}))
+        self.assertNotIn("EnvironmentVariables",
+                         self.install.plist_body(env={}, which_binary=lambda n: None))
 
     def test_blank_values_are_not_propagated(self):
-        body = self.install.plist_body(env={"NUDGE_TICK": "", "NUDGE_HOME": "/tmp/q"})
+        body = self.install.plist_body(env={"NUDGE_TICK": "", "NUDGE_HOME": "/tmp/q"},
+                                       which_binary=lambda n: None)
         self.assertEqual(body["EnvironmentVariables"], {"NUDGE_HOME": "/tmp/q"})
 
+    def test_notifier_path_is_pinned_into_the_plist(self):
+        # resolved in the installing shell, because the daemon's PATH cannot find it
+        body = self.install.plist_body(env={}, which_binary=lambda n: "/opt/homebrew/bin/" + n)
+        self.assertEqual(body["EnvironmentVariables"]["NUDGE_NOTIFIER"],
+                         "/opt/homebrew/bin/terminal-notifier")
+
+    def test_no_notifier_pinned_when_none_installed(self):
+        body = self.install.plist_body(env={}, which_binary=lambda n: None)
+        self.assertNotIn("NUDGE_NOTIFIER", body.get("EnvironmentVariables", {}))
+
+    def test_sound_is_propagated(self):
+        body = self.install.plist_body(env={"NUDGE_SOUND": "Glass"},
+                                       which_binary=lambda n: None)
+        self.assertEqual(body["EnvironmentVariables"], {"NUDGE_SOUND": "Glass"})
+
+    def test_sound_disabled_is_propagated_not_dropped(self):
+        # "none" must reach the daemon, or it silently keeps the default
+        body = self.install.plist_body(env={"NUDGE_SOUND": "none"},
+                                       which_binary=lambda n: None)
+        self.assertEqual(body["EnvironmentVariables"], {"NUDGE_SOUND": "none"})
+
     def test_unrelated_env_is_not_propagated(self):
-        body = self.install.plist_body(env={"PATH": "/nope", "NUDGE_TICK": "5"})
+        body = self.install.plist_body(env={"PATH": "/nope", "NUDGE_TICK": "5"},
+                                       which_binary=lambda n: None)
         self.assertEqual(body["EnvironmentVariables"], {"NUDGE_TICK": "5"})
 
 
@@ -228,6 +286,111 @@ class TestStrays(StoreCase):
     def test_status_is_quiet_when_nothing_is_hand_started(self):
         self.install._process_table = lambda: []
         self.assertNotIn("stray", "\n".join(self.install.status_report()))
+
+
+class TestNotifyFallback(unittest.TestCase):
+    """Installing terminal-notifier must not silently stop delivery."""
+
+    PRESENT = lambda self, name: "/opt/homebrew/bin/" + name
+
+    class _Result:
+        def __init__(self, returncode, stderr=b""):
+            self.returncode, self.stderr = returncode, stderr
+
+    def test_prefers_terminal_notifier_when_it_works(self):
+        import notify
+        calls = []
+        argv, _ = notify.send("t", "m", which=self.PRESENT,
+                              runner=lambda a, **k: (calls.append(a), self._Result(0))[1])
+        self.assertIn("terminal-notifier", argv[0])
+        self.assertEqual(len(calls), 1)
+
+    def test_falls_back_when_terminal_notifier_is_not_permitted(self):
+        # the real exit 3: "Notifications are not allowed for this application"
+        import notify
+        results = [self._Result(3, b"Could not request notification permission"),
+                   self._Result(0)]
+        argv, _ = notify.send("t", "m", which=self.PRESENT,
+                              runner=lambda a, **k: results.pop(0))
+        self.assertEqual(argv[0], "osascript")
+
+    def test_reports_when_every_sender_fails(self):
+        import notify
+        argv, attempts = notify.send(
+            "t", "m", which=self.PRESENT,
+            runner=lambda a, **k: self._Result(3, b"nope"))
+        self.assertIsNone(argv)
+        self.assertEqual(len(attempts), 2)
+        described = notify.describe_failure(attempts)
+        self.assertTrue(any("terminal-notifier" in line for line in described))
+        self.assertTrue(any("exited 3: nope" in line for line in described))
+
+    def test_osascript_only_when_terminal_notifier_is_absent(self):
+        import notify
+        forms = notify.commands("t", "m", which=lambda name: None)
+        self.assertEqual(len(forms), 1)
+        self.assertEqual(forms[0][0], "osascript")
+
+
+class TestSound(unittest.TestCase):
+    PRESENT = lambda self, name: "/opt/homebrew/bin/" + name
+
+    def test_default_sound_on_both_senders(self):
+        import notify
+        tn, osa = notify.commands("t", "m", which=self.PRESENT)
+        self.assertEqual(tn[-2:], ["-sound", "Ping"])
+        self.assertIn("sound name", " ".join(osa))
+        self.assertEqual(osa[-1], "Ping")
+
+    def test_sound_is_argv_not_spliced_into_applescript(self):
+        import notify
+        _, osa = notify.commands("t", "m", which=self.PRESENT, sound='Glass" & (do shell')
+        self.assertNotIn("do shell", " ".join(osa[:5]))  # not in the script body
+        self.assertEqual(osa[-1], 'Glass" & (do shell')
+
+    def test_silent_omits_the_sound_entirely(self):
+        import notify
+        tn, osa = notify.commands("t", "m", which=self.PRESENT, sound=None)
+        self.assertNotIn("-sound", tn)
+        self.assertNotIn("sound name", " ".join(osa))
+
+    def test_env_selects_and_disables(self):
+        import notify
+        self.assertEqual(notify.sound_name({}), "Ping")
+        self.assertEqual(notify.sound_name({"NUDGE_SOUND": "Glass"}), "Glass")
+        for off in ("", "none", "OFF", " none "):
+            self.assertIsNone(notify.sound_name({"NUDGE_SOUND": off}))
+
+
+class TestNotifierLookup(unittest.TestCase):
+    """launchd hands the daemon a bare PATH; the sender must survive that."""
+
+    def test_pinned_path_wins(self):
+        import notify
+        found = notify.find_notifier({"NUDGE_NOTIFIER": "/bin/sh"}, which=lambda n: None)
+        self.assertEqual(found, "/bin/sh")
+
+    def test_unusable_pin_falls_through_to_osascript(self):
+        import notify
+        self.assertIsNone(
+            notify.find_notifier({"NUDGE_NOTIFIER": "/nope/terminal-notifier"},
+                                 which=lambda n: None))
+
+    def test_path_lookup_used_when_nothing_pinned(self):
+        import notify
+        self.assertEqual(notify.find_notifier({}, which=lambda n: "/somewhere/" + n),
+                         "/somewhere/terminal-notifier")
+
+    def test_known_prefixes_searched_when_path_is_bare(self):
+        # the actual daemon failure: PATH=/usr/bin:/bin:/usr/sbin:/sbin
+        import notify
+        real = os.access
+        try:
+            os.access = lambda p, m: p == "/opt/homebrew/bin/terminal-notifier"
+            self.assertEqual(notify.find_notifier({}, which=lambda n: None),
+                             "/opt/homebrew/bin/terminal-notifier")
+        finally:
+            os.access = real
 
 
 class TestNotifyCommand(unittest.TestCase):

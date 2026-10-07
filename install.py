@@ -20,6 +20,7 @@ and moving a clone is the same command run again from its new home.
 import argparse
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 
@@ -61,20 +62,25 @@ def is_ours(path):
         return False
 
 
-def daemon_env(env=None):
+def daemon_env(env=None, which=None):
     """The nudge settings to bake into the plist.
 
     A launchd agent inherits nothing from the shell that installed it, so a
-    `NUDGE_TICK` or `NUDGE_HOME` exported in a terminal would otherwise reach the
-    CLI and not the daemon -- the daemon would sweep a different queue, or at a
+    `NUDGE_TICK`, `NUDGE_HOME` or `NUDGE_SOUND` exported in a terminal would
+    otherwise reach the CLI and not the daemon -- the daemon would sweep a different queue, or at a
     different interval, than the one the user thinks they configured. Whatever is
     set at install time is captured here; changing it means re-installing.
     """
     env = os.environ if env is None else env
-    return {k: env[k] for k in ("NUDGE_TICK", "NUDGE_HOME") if env.get(k)}
+    settings = {k: env[k] for k in ("NUDGE_TICK", "NUDGE_HOME", "NUDGE_SOUND")
+                if env.get(k) is not None and env[k] != ""}
+    notifier = env.get("NUDGE_NOTIFIER") or (which or shutil.which)("terminal-notifier")
+    if notifier:
+        settings["NUDGE_NOTIFIER"] = notifier
+    return settings
 
 
-def plist_body(python=None, here=None, home=None, env=None):
+def plist_body(python=None, here=None, home=None, env=None, which_binary=None):
     """The LaunchAgent. Points at the shim, so a moved clone needs one re-install.
 
     RunAtLoad starts the daemon at login and KeepAlive restarts it if it dies --
@@ -82,7 +88,7 @@ def plist_body(python=None, here=None, home=None, env=None):
     scheduled it.
     """
     home = store.HOME if home is None else home
-    settings = daemon_env(env)
+    settings = daemon_env(env, which=which_binary)
     body = {
         "Label": LABEL,
         "ProgramArguments": [shim_path("nudge-daemon")],
