@@ -38,7 +38,12 @@ Built:
   with the next one. Puts one notification on screen, synchronously, right
   now; it does not schedule and holds no state. Tries each sender in turn and falls back
   on a non-zero exit, not merely on absence.
-- `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link
+- `install.py` — install / uninstall / status for the shims, LaunchAgent and skill link.
+  Uninstall is best-effort-then-verify, not transactional: rolling back a delete would
+  mean recreating what was just removed, and a half-done uninstall is better finished
+  than reverted. It records each failure, keeps going, re-checks all five artefacts, and
+  exits non-zero if any survived so `uninstall && rm -rf ~/.nudge` cannot delete a live
+  daemon's queue.
 - `.claude/skills/nudge/SKILL.md` — the Claude Code skill wrapping the CLI
 - `test_nudge.py` — 53 unittest cases
 - `README.md` — Claude Code usage, install, design, troubleshooting, known gaps
@@ -87,6 +92,9 @@ There is no API to take a banner back.
 - `install.strays()` matches on argv shape — a python interpreter invoked against a file
   named like the daemon — not a substring of the command. A substring test flags any
   shell or editor that merely mentions the filename, including the command doing the check.
+- Paths are compared with `os.path.commonpath`, never `startswith`: a clone at
+  `/x/nudge` would otherwise treat `/x/nudge-old` as inside itself and delete that other
+  installation's skill link.
 - `pgrep -f "python3 nudge_daemon.py"` never matches: the command line carries the
   resolved framework interpreter path, not `python3`. Match the script name alone.
 - `launchctl print` output is parsed on anchored line starts: a bare `pid =` substring

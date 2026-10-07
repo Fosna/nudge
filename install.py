@@ -197,37 +197,102 @@ def cmd_install(args):
               % (BIN, shim_path("nudge")))
 
 
-def cmd_uninstall(args):
-    removed = []
+def _is_inside(path, root):
+    """True if `path` lies within `root`.
+
+    A plain `startswith` would treat /x/nudge-old as inside /x/nudge and delete
+    another clone's skill link, so the comparison is made on path components.
+    """
+    try:
+        return os.path.commonpath([os.path.realpath(path), os.path.realpath(root)]) \
+            == os.path.realpath(root)
+    except ValueError:  # different drives, or a relative/absolute mix
+        return False
+
+
+def _try_remove(path, removed, failed):
+    """Unlink one thing, recording the outcome instead of raising.
+
+    Uninstall never aborts: a plist that will not budge is no reason to leave
+    the shims behind.
+    """
+    try:
+        os.unlink(path)
+        removed.append(path)
+    except OSError as e:
+        failed.append((path, e.strerror or str(e)))
+
+
+def survivors():
+    """Everything that should be gone after an uninstall but is not."""
+    left = []
     if is_loaded():
-        _launchctl("bootout", "%s/%s" % (_domain(), LABEL))
+        left.append("launchd job %s is still loaded" % LABEL)
+    for pid, command in strays():
+        left.append("pid %d is still running: %s" % (pid, command))
     if os.path.exists(PLIST):
-        os.unlink(PLIST)
-        removed.append(PLIST)
+        left.append("plist %s" % PLIST)
     for name in SHIMS:
         path = shim_path(name)
         if os.path.exists(path) and is_ours(path):
-            os.unlink(path)
-            removed.append(path)
-    for pid, command in strays(managed_pid):
-        lines.append("stray   pid %d is sweeping the same queue outside launchd\n"
-                     "        %s\n"
-                     "        it will steal jobs and fire them on its own interval --"
-                     " `kill %d`" % (pid, command, pid))
+            left.append("shim %s" % path)
+    if os.path.islink(SKILL_LINK) and _is_inside(SKILL_LINK, HERE):
+        left.append("skill link %s" % SKILL_LINK)
+    return left
+
+
+def cmd_uninstall(args):
+    removed, left_alone, failed = [], [], []
+
+    # Stop the daemon before the plist goes, so a refusal here is still
+    # recoverable with launchctl -- the job it names would otherwise be gone.
+    if is_loaded():
+        r = _launchctl("bootout", "%s/%s" % (_domain(), LABEL))
+        if r.returncode != 0 and is_loaded():
+            failed.append(("launchd job " + LABEL,
+                           (r.stderr or "").strip() or "bootout exited %d" % r.returncode))
+
+    if os.path.exists(PLIST):
+        _try_remove(PLIST, removed, failed)
+
+    for name in SHIMS:
+        path = shim_path(name)
+        if not os.path.exists(path):
+            continue
+        if is_ours(path):
+            _try_remove(path, removed, failed)
+        else:
+            left_alone.append("%s -- not written by nudge" % path)
 
     if os.path.islink(SKILL_LINK):
-        if os.path.realpath(SKILL_LINK).startswith(os.path.realpath(HERE)):
-            os.unlink(SKILL_LINK)
-            removed.append(SKILL_LINK)
+        if _is_inside(SKILL_LINK, HERE):
+            _try_remove(SKILL_LINK, removed, failed)
         else:
-            print("left %s alone -- it points outside this clone" % SKILL_LINK)
-    if not removed:
-        print("nothing to uninstall")
-        return
-    print("uninstalled nudge")
+            left_alone.append("%s -- points outside this clone" % SKILL_LINK)
+
     for path in removed:
-        print("  removed %s" % path)
-    print("\nstate in %s was left alone (rm -rf it to drop the queue)" % store.HOME)
+        print("removed    %s" % path)
+    for item in left_alone:
+        print("left       %s" % item)
+    for path, why in failed:
+        print("FAILED     %s: %s" % (path, why))
+
+    remaining = survivors()
+    if remaining:
+        print("\nstill present after uninstall:")
+        for item in remaining:
+            print("  %s" % item)
+        print("\nnudge is NOT fully uninstalled. Do not `rm -rf %s` yet --" % store.HOME
+              + "\na daemon still running would keep reading it.")
+        return 1
+
+    if not removed and not left_alone:
+        print("nothing to uninstall")
+        return 0
+
+    print("\nuninstalled. State in %s was left alone (rm -rf it to drop the queue)."
+          % store.HOME)
+    return 0
 
 
 def plist_program():
@@ -367,4 +432,6 @@ def build_parser():
 
 if __name__ == "__main__":
     args = build_parser().parse_args()
-    args.func(args)
+    # Subcommands return an exit code; uninstall uses it to say "something survived",
+    # so `install.py uninstall && rm -rf ~/.nudge` cannot delete a live daemon's queue.
+    sys.exit(args.func(args) or 0)
