@@ -181,13 +181,14 @@ Banners / Alerts. `terminal-notifier -diagnose` prints the style currently in ef
 ## peon-ping overlay
 
 If [peon-ping](https://www.peonping.com/) is installed at `~/.claude/hooks/peon-ping`, a
-nudge also puts up its large on-screen overlay and plays the peon line "Something need
-doing?" at peon-ping's volume. The overlay stays up until you click it. It follows
-peon-ping's theme and position, sitting in its own rows below peon-ping's own overlays.
+nudge is shown as its large on-screen overlay instead of a banner, with the peon line
+"Something need doing?" at peon-ping's volume. The overlay stays up until you click it.
+It follows peon-ping's theme and position, sitting in its own rows below peon-ping's own
+overlays.
 
-The banner is still posted, silently, so Notification Center keeps a record of the
-reminder after the overlay is gone. If the overlay cannot start, the banner plays its
-usual sound instead. `NUDGE_SOUND=none` silences the peon line too.
+The overlay is not a macOS notification, so it leaves nothing in Notification Center once
+clicked away. If it cannot start, the banner is posted instead, with its usual sound.
+`NUDGE_SOUND=none` silences the peon line too.
 
 ```bash
 NUDGE_STYLE=banner python3 install.py install              # banner only
@@ -240,7 +241,7 @@ not match, because the command line carries the resolved interpreter path rather
 | `nudge_daemon.py` | tick loop; fires due jobs |
 | `store.py` | JSON queue, atomic writes under an flock |
 | `timespec.py` | duration parsing and relative-time display |
-| `notify.py` | delivers one notification: `terminal-notifier`, falling back to `osascript`; plus peon-ping's overlay when installed |
+| `notify.py` | delivers one notification: `terminal-notifier`, falling back to `osascript`, or peon-ping's overlay when installed |
 | `install.py` | `install`, `uninstall`, `status` |
 | `.claude/skills/nudge/SKILL.md` | the Claude Code skill |
 | `.claude/skills/audit-loop/SKILL.md` | project-only skill for audit-and-fix passes on this repo |

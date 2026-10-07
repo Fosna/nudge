@@ -510,24 +510,26 @@ class TestPeonOverlay(unittest.TestCase):
         self.assertEqual(argv[12], "ops")
         self.assertFalse(any("mac-overlay" in a for a in argv))
 
-    def test_send_plays_the_line_and_silences_the_banner(self):
+    def test_overlay_replaces_the_banner(self):
         self.config(volume=0.3)
         calls = []
-        self.notify.send("t", "m", which=lambda n: None, sound="Ping", peon=self.home,
-                         spawn=self.spawn, runner=lambda a, **k: calls.append(a))
+        argv, result = self.notify.send(
+            "t", "m", which=lambda n: None, sound="Ping", peon=self.home,
+            spawn=self.spawn, runner=lambda a, **k: calls.append(a))
         overlay, sound = [argv for argv, _ in self.spawned]
         self.assertEqual(overlay[4], "m")
+        self.assertEqual((argv, result), (overlay, None))  # not a failure to log
         self.assertEqual(sound[:3], ["afplay", "-v", "0.3"])
         self.assertTrue(sound[-1].endswith("PeonWhat4.wav"))
         self.assertTrue(all(kw["start_new_session"] for _, kw in self.spawned))
-        self.assertNotIn("sound name", " ".join(calls[0]))  # banner kept, silent
+        self.assertEqual(calls, [])  # one notification, one click
 
     def test_silent_setting_silences_the_line_too(self):
         self.notify.send("t", "m", which=lambda n: None, sound=None, peon=self.home,
                          spawn=self.spawn, runner=lambda a, **k: None)
         self.assertEqual(len(self.spawned), 1)
 
-    def test_banner_keeps_its_sound_when_the_overlay_cannot_start(self):
+    def test_banner_with_its_sound_when_the_overlay_cannot_start(self):
         def broken(argv, **kw):
             raise OSError("no osascript")
         calls = []

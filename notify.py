@@ -1,8 +1,8 @@
 """macOS notification delivery: terminal-notifier, falling back to osascript.
 
-When peon-ping is installed, a nudge also gets its large on-screen overlay and a
-peon voice line. The banner is still posted, silently, so Notification Center
-keeps a record of a reminder whose overlay was clicked away.
+When peon-ping is installed, a nudge is shown as its large on-screen overlay with
+a peon voice line instead. The banner is only the fallback then, for an overlay
+that could not start.
 
 The fallback is driven by the *outcome*, not just by which binaries exist.
 An installed `terminal-notifier` that has not been granted notification
@@ -154,7 +154,9 @@ def _free_slot():
 
 
 def show_peon(title, message, home, with_sound=True, spawn=subprocess.Popen):
-    """Start the overlay and voice line without waiting. False if it could not start.
+    """Start the overlay and voice line without waiting.
+
+    Returns the overlay's argv, or None if it could not start.
 
     Both run in their own session, so they are neither blocked on by the daemon
     nor killed with it when launchd restarts the job.
@@ -169,15 +171,15 @@ def show_peon(title, message, home, with_sound=True, spawn=subprocess.Popen):
                                    config.get("notification_position") or "top-center")
             _overlays[slot] = spawn(argv, stdin=script, **quiet)
     except OSError:
-        return False
+        return None
     line = os.path.join(home, PEON_LINE)
     if with_sound and os.path.isfile(line):
         try:
             _children.append(spawn(["afplay", "-v", "%g" % _volume(config), line],
                                    stdin=subprocess.DEVNULL, **quiet))
         except OSError:
-            pass  # the overlay is up; a missing voice line is not worth a banner sound
-    return True
+            pass  # the overlay is up; a missing voice line is not worth a banner
+    return argv
 
 
 def commands(title, message, which=_default_which, sound=FROM_ENV):
@@ -207,15 +209,18 @@ def send(title, message, runner=subprocess.run, which=_default_which, sound=FROM
     """Deliver one notification, trying each form until one succeeds.
 
     `peon` is peon-ping's install dir, None for banner only, or FROM_ENV to look
-    it up. When its overlay starts, the voice line replaces the banner's sound.
+    it up. A started overlay is the whole delivery: one notification, one click,
+    and no copy left in Notification Center.
 
-    Returns (argv, result) for the attempt that worked, or (None, [results])
-    if every form failed -- the caller decides whether that is worth logging.
+    Returns (argv, result) for the attempt that worked -- result is None for the
+    overlay, which is not waited on -- or (None, [results]) if every form failed;
+    the caller decides whether that is worth logging.
     """
     sound = sound_name() if sound is FROM_ENV else sound
     peon = find_peon() if peon is FROM_ENV else peon
-    if peon and show_peon(title, message, peon, with_sound=bool(sound), spawn=spawn):
-        sound = None
+    overlay = peon and show_peon(title, message, peon, with_sound=bool(sound), spawn=spawn)
+    if overlay:
+        return overlay, None
     attempts = []
     for argv in commands(title, message, which=which, sound=sound):
         result = runner(argv, capture_output=True)
