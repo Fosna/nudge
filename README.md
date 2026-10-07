@@ -180,6 +180,9 @@ Banners / Alerts. `terminal-notifier -diagnose` prints the style currently in ef
 
 ## peon-ping overlay
 
+peon-ping is optional and not bundled. It is a separate project with its own licence, and
+its sound packs carry their own terms.
+
 If [peon-ping](https://www.peonping.com/) is installed at `~/.claude/hooks/peon-ping`, a
 nudge is shown as its large on-screen overlay instead of a banner, with the peon line
 "Something need doing?" at peon-ping's volume. The overlay stays up until you click it.
@@ -289,3 +292,7 @@ every file is gone. If anything is left it prints what, and exits non-zero. So t
 `&&` above is load-bearing: without it you could delete the queue while a daemon is
 still reading it. The usual cause is a `nudge_daemon.py` someone started by hand, which
 `launchctl` never managed and uninstall therefore cannot stop.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
