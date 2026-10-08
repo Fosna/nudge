@@ -129,8 +129,23 @@ re-run `python3 install.py install`** from its new home to repoint everything.
 `install` is idempotent. It refuses to overwrite a `nudge` on your PATH it did not write,
 and it leaves an existing `~/.claude/skills/nudge` alone rather than clobbering it.
 
-`~/.local/bin` needs to be on your PATH for the bare `nudge` command; install warns you
-if it isn't.
+`~/.local/bin` needs to be on your PATH for the bare `nudge` command. If it isn't,
+`install` and `nudge status` print the line to add for your shell:
+
+| shell | file |
+|---|---|
+| zsh | `~/.zshenv` |
+| bash | `~/.bash_profile` |
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshenv
+```
+
+Use that file, not `~/.zshrc`: Claude Code runs commands in a non-interactive shell,
+which never reads `.zshrc`. Then restart your terminal and any running Claude Code
+session — they keep the PATH they started with. A terminal inside VS Code inherits
+VS Code's PATH, so quit and reopen VS Code itself. Until then the skill falls back to
+`~/.local/bin/nudge`.
 
 For nicer notifications, `brew install terminal-notifier`. Without it `nudge` falls back
 to `osascript`, which works but gives you Script Editor's icon and no click actions.
