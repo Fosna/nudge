@@ -6,8 +6,8 @@ description: Schedule a macOS notification to fire later, even after this sessio
 # nudge
 
 A notification scheduled here is handed to a background daemon, so it fires whether or
-not this session is still alive. Everything runs through the `nudge` command, which
-`install.py` put on the PATH.
+not this session is still alive. Everything runs through the `nudge` command, a shim
+`install.py` wrote to `~/.local/bin`.
 
 ## Schedule one
 
@@ -46,9 +46,14 @@ If it is unhealthy, `status` exits non-zero and prints the exact repair command,
 including the path to the clone — run what it tells you. That is the documented setup
 step, not a new decision, so do it without asking and mention that you did.
 
-If `nudge` is not on the PATH at all, the project was never installed on this machine.
-Say so rather than guessing a path: the fix is `python3 install.py install` from the
-clone, and only the user knows where that is.
+If bare `nudge` is not found, try `~/.local/bin/nudge status` before concluding
+anything — that is where `install.py` puts the shim, and that directory is often not
+on the PATH. If it works, the project is installed: use the full path for the rest of
+the session, and pass on the PATH fix that `status` prints.
+
+Only if `~/.local/bin/nudge` is missing too is nudge not installed. The fix is
+`python3 install.py install` from the clone; `readlink ~/.claude/skills/nudge` points
+into it, if the link exists. Otherwise ask the user where the clone is.
 
 ## Reporting back
 

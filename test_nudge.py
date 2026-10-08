@@ -336,6 +336,30 @@ class TestStrays(StoreCase):
         self.assertNotIn("stray", "\n".join(self.install.status_report()))
 
 
+class TestPathHint(unittest.TestCase):
+    """Off-PATH shims look like 'never installed'; say exactly how to fix it."""
+
+    def setUp(self):
+        import install
+        self.install = importlib.reload(install)
+
+    def hint(self, shell, path="/usr/bin:/bin"):
+        return self.install.path_hint({"PATH": path, "SHELL": shell})
+
+    def test_quiet_when_on_path(self):
+        self.assertIsNone(self.hint("/bin/zsh", "/usr/bin:" + self.install.BIN))
+
+    def test_zsh_uses_zshenv_not_zshrc(self):
+        # Claude Code's shell is non-interactive and never reads .zshrc
+        self.assertIn(">> ~/.zshenv", self.hint("/bin/zsh"))
+
+    def test_bash_uses_bash_profile(self):
+        self.assertIn(">> ~/.bash_profile", self.hint("/bin/bash"))
+
+    def test_unknown_shell_falls_back_to_the_shim_path(self):
+        self.assertIn(self.install.shim_path("nudge"), self.hint("/usr/bin/fish"))
+
+
 class TestNotifyFallback(unittest.TestCase):
     """Installing terminal-notifier must not silently stop delivery."""
 

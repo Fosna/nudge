@@ -199,10 +199,27 @@ def cmd_install(args):
     print("  plist  %s" % PLIST)
     print("  skill  %s (%s)" % (SKILL_LINK, link_skill()))
     print("  logs   %s" % store.HOME)
-    if BIN not in os.environ.get("PATH", "").split(os.pathsep):
-        print("\nnote: %s is not on your PATH, so `nudge` will not resolve.\n"
-              "      add it to your shell profile, or call %s directly."
-              % (BIN, shim_path("nudge")))
+    hint = path_hint()
+    if hint:
+        print("\nnote: %s is not on your PATH, so `nudge` will not resolve.\n      %s"
+              % (BIN, hint))
+
+
+# The file each shell reads even when non-interactive, which is how Claude Code
+# runs commands -- `.zshrc` would fix the terminal but not the skill.
+PROFILES = {"zsh": "~/.zshenv", "bash": "~/.bash_profile"}
+
+
+def path_hint(env=None):
+    """How to put BIN on the PATH for the user's shell, or None if it already is."""
+    env = os.environ if env is None else env
+    if BIN in env.get("PATH", "").split(os.pathsep):
+        return None
+    profile = PROFILES.get(os.path.basename(env.get("SHELL", "")))
+    if not profile:
+        return "add it to your shell profile, or call %s directly." % shim_path("nudge")
+    return ("run:  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> %s\n"
+            "      then restart your terminal and Claude Code." % profile)
 
 
 def _is_inside(path, root):
@@ -421,6 +438,11 @@ def status_report():
         lines.append("skill   %s exists and is not a symlink" % SKILL_LINK)
     else:
         lines.append("skill   not linked (project-scoped only)")
+
+    hint = path_hint()
+    if hint:
+        lines.append("path    %s is not on PATH, so bare `nudge` will not resolve\n"
+                     "        %s" % (BIN, hint.replace("\n      ", "\n        ")))
     return lines
 
 
